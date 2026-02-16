@@ -10,7 +10,7 @@ import Dashboard from "@/pages/Dashboard";
 import Devices from "@/pages/Devices";
 import DeviceDetail from "@/pages/DeviceDetail";
 import Caregivers from "@/pages/Caregivers";
-import BulkUpload from "@/pages/BulkUpload";
+
 import HelpSupport from "@/pages/HelpSupport";
 import LogsAnalytics from "@/pages/LogsAnalytics";
 import NotFound from "@/pages/NotFound";
@@ -37,7 +37,7 @@ const AppRoutes = () => (
       <Route path="devices" element={<Devices />} />
       <Route path="devices/:id" element={<DeviceDetail />} />
       <Route path="caregivers" element={<Caregivers />} />
-      <Route path="bulk-upload" element={<BulkUpload />} />
+      
       <Route path="help-support" element={<HelpSupport />} />
       <Route path="logs" element={<LogsAnalytics />} />
     </Route>
