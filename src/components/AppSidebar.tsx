@@ -6,7 +6,7 @@ import {
   Pill,
   Monitor,
   Users,
-  Upload,
+  
   BarChart3,
   HelpCircle,
   LogOut,
@@ -20,7 +20,7 @@ const navItems = [
   { to: "/", icon: LayoutDashboard, label: "Dashboard" },
   { to: "/devices", icon: Monitor, label: "Devices" },
   { to: "/caregivers", icon: Users, label: "Caregivers" },
-  { to: "/bulk-upload", icon: Upload, label: "Bulk Upload" },
+  
   { to: "/help-support", icon: HelpCircle, label: "Help & Support" },
   { to: "/logs", icon: BarChart3, label: "Logs & Analytics" },
 ];
