@@ -1,26 +1,34 @@
 import React from "react";
 import { NavLink, useLocation } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
+import { useLocale, localeLabels, supportedLocales, type AppLocale } from "@/contexts/LocaleContext";
 import {
   LayoutDashboard,
   Pill,
   Monitor,
   Users,
-  
+  UserPlus,
   BarChart3,
   HelpCircle,
-  LogOut,
   ChevronLeft,
   ChevronRight,
+  Languages,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 const navItems = [
   { to: "/", icon: LayoutDashboard, label: "Dashboard" },
+  { to: "/patients", icon: UserPlus, label: "Patients" },
   { to: "/devices", icon: Monitor, label: "Devices" },
   { to: "/caregivers", icon: Users, label: "Caregivers" },
-  
   { to: "/help-support", icon: HelpCircle, label: "Help & Support" },
   { to: "/logs", icon: BarChart3, label: "Logs & Analytics" },
 ];
@@ -31,7 +39,8 @@ interface AppSidebarProps {
 }
 
 const AppSidebar: React.FC<AppSidebarProps> = ({ collapsed, onToggle }) => {
-  const { logout, user } = useAuth();
+  const { user } = useAuth();
+  const { locale, setLocale } = useLocale();
   const location = useLocation();
 
   return (
@@ -48,7 +57,7 @@ const AppSidebar: React.FC<AppSidebarProps> = ({ collapsed, onToggle }) => {
         </div>
         {!collapsed && (
           <span className="text-sm font-semibold text-sidebar-foreground truncate">
-            Smart Pill Dispenser
+            Navos ZET
           </span>
         )}
       </div>
@@ -78,19 +87,29 @@ const AppSidebar: React.FC<AppSidebarProps> = ({ collapsed, onToggle }) => {
 
       {/* Bottom */}
       <div className="border-t border-sidebar-border p-3 space-y-2">
+        {!collapsed && (
+          <div className="px-1">
+            <Select value={locale} onValueChange={(v) => setLocale(v as AppLocale)}>
+              <SelectTrigger className="h-9 bg-sidebar border-sidebar-border text-sidebar-fg">
+                <Languages className="h-4 w-4 shrink-0 mr-2" />
+                <SelectValue placeholder="Language" />
+              </SelectTrigger>
+              <SelectContent>
+                {supportedLocales.map((code) => (
+                  <SelectItem key={code} value={code}>
+                    {localeLabels[code]}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        )}
         {!collapsed && user && (
           <div className="px-3 py-2">
             <p className="text-xs text-sidebar-muted truncate">{user.email}</p>
             <p className="text-xs text-sidebar-fg font-medium truncate">{user.name}</p>
           </div>
         )}
-        <button
-          onClick={logout}
-          className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm text-sidebar-fg hover:bg-sidebar-hover transition-colors"
-        >
-          <LogOut className="h-5 w-5 shrink-0" />
-          {!collapsed && <span>Sign Out</span>}
-        </button>
       </div>
 
       {/* Collapse toggle */}

@@ -4,13 +4,18 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
+import { LocaleProvider } from "@/contexts/LocaleContext";
+import { PatientsProvider } from "@/contexts/PatientsContext";
 import AppLayout from "@/components/AppLayout";
 import Login from "@/pages/Login";
 import Dashboard from "@/pages/Dashboard";
 import Devices from "@/pages/Devices";
 import DeviceDetail from "@/pages/DeviceDetail";
 import Caregivers from "@/pages/Caregivers";
-
+import CaregiverDetail from "@/pages/CaregiverDetail";
+import Patients from "@/pages/Patients";
+import PatientDetail from "@/pages/PatientDetail";
+import AddPatient from "@/pages/AddPatient";
 import HelpSupport from "@/pages/HelpSupport";
 import LogsAnalytics from "@/pages/LogsAnalytics";
 import NotFound from "@/pages/NotFound";
@@ -37,7 +42,10 @@ const AppRoutes = () => (
       <Route path="devices" element={<Devices />} />
       <Route path="devices/:id" element={<DeviceDetail />} />
       <Route path="caregivers" element={<Caregivers />} />
-      
+      <Route path="caregivers/:id" element={<CaregiverDetail />} />
+      <Route path="patients" element={<Patients />} />
+      <Route path="patients/:id" element={<PatientDetail />} />
+      <Route path="patients/add" element={<AddPatient />} />
       <Route path="help-support" element={<HelpSupport />} />
       <Route path="logs" element={<LogsAnalytics />} />
     </Route>
@@ -47,15 +55,19 @@ const AppRoutes = () => (
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
-    <AuthProvider>
-      <TooltipProvider>
-        <Toaster />
-        <Sonner />
-        <BrowserRouter>
-          <AppRoutes />
-        </BrowserRouter>
-      </TooltipProvider>
-    </AuthProvider>
+    <LocaleProvider>
+      <AuthProvider>
+        <PatientsProvider>
+        <TooltipProvider>
+          <Toaster />
+          <Sonner />
+          <BrowserRouter>
+            <AppRoutes />
+          </BrowserRouter>
+        </TooltipProvider>
+      </PatientsProvider>
+      </AuthProvider>
+    </LocaleProvider>
   </QueryClientProvider>
 );
 

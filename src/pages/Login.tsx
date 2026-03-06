@@ -38,7 +38,7 @@ const Login: React.FC = () => {
             <Pill className="h-10 w-10 text-primary-foreground" />
           </div>
           <h1 className="mb-4 text-4xl font-bold text-primary-foreground tracking-tight">
-            Smart Pill Dispenser
+            Navos ZET
           </h1>
           <p className="text-lg text-sidebar-fg/70">
             Pharmacy Management Panel — Monitor devices, manage refills, and ensure patient safety from one centralized dashboard.
@@ -53,7 +53,7 @@ const Login: React.FC = () => {
             <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary">
               <Pill className="h-5 w-5 text-primary-foreground" />
             </div>
-            <span className="text-xl font-bold text-foreground">Smart Pill Dispenser</span>
+            <span className="text-xl font-bold text-foreground">Navos ZET</span>
           </div>
 
           <h2 className="mb-2 text-2xl font-bold text-foreground">Welcome back</h2>

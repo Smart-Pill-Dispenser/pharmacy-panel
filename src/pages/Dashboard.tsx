@@ -1,9 +1,9 @@
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Monitor, AlertTriangle, HelpCircle, Activity, Bell, Package } from "lucide-react";
+import { Monitor, HelpCircle, Bell, Package } from "lucide-react";
 import StatCard from "@/components/StatCard";
 import StatusBadge from "@/components/StatusBadge";
-import { mockDevices, mockHelpRequests, mockRefillNotifications } from "@/data/mockData";
+import { mockDevices, mockTotalHardwareDevices, mockHelpRequests, mockRefillNotifications } from "@/data/mockData";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import {
@@ -96,8 +96,8 @@ const Dashboard: React.FC = () => {
   const dispenseData = getDispenseData(period);
   const helpData = getHelpData(period);
 
+  const assignedDevices = mockDevices.length;
   const onlineDevices = mockDevices.filter((d) => d.status === "online").length;
-  const errorDevices = mockDevices.filter((d) => d.status === "error").length;
   const needsRefill = mockDevices.filter((d) => d.remainingPouches <= d.refillThreshold).length;
   const pendingHelp = mockHelpRequests.filter((h) => h.status !== "resolved").length;
 
@@ -111,10 +111,10 @@ const Dashboard: React.FC = () => {
 
       {/* Stats */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <StatCard title="Total Devices" value={mockDevices.length} icon={<Monitor className="h-5 w-5 text-accent-foreground" />} trend={`${onlineDevices} online`} />
-        <StatCard title="Needs Refill" value={needsRefill} icon={<Package className="h-5 w-5 text-warning" />} variant="warning" trend="Below threshold" />
-        <StatCard title="Device Errors" value={errorDevices} icon={<AlertTriangle className="h-5 w-5 text-destructive" />} variant="destructive" />
-        <StatCard title="Help Requests" value={pendingHelp} icon={<HelpCircle className="h-5 w-5 text-info" />} variant="info" trend="Pending" />
+        <StatCard title="Hardware (assigned / total)" value={`${assignedDevices} / ${mockTotalHardwareDevices}`} icon={<Monitor className="h-5 w-5 text-info" />} trend="devices" variant="info" />
+        <StatCard title="Total Devices" value={mockDevices.length} icon={<Monitor className="h-5 w-5 text-success" />} trend={`${onlineDevices} online`} variant="success" />
+        <StatCard title="Needs Refill" value={needsRefill} icon={<Package className="h-5 w-5 text-warning" />} trend="Below threshold" variant="warning" />
+        <StatCard title="Help Requests" value={pendingHelp} icon={<HelpCircle className="h-5 w-5 text-destructive" />} trend="Pending" variant="destructive" />
       </div>
 
       {/* KPI Charts */}

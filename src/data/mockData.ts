@@ -20,6 +20,8 @@ export interface HelpRequest {
   status: "pending" | "resolved" | "in_progress";
   description: string;
   patientName: string;
+  /** Set when status is resolved: how the issue was resolved */
+  resolutionReason?: string;
 }
 
 export interface Caregiver {
@@ -47,6 +49,36 @@ export interface RefillNotification {
   threshold: number;
   timestamp: string;
   urgent: boolean;
+}
+
+/** Patient medication line for add-patient flow */
+export interface PatientMedication {
+  name: string;
+  dosage: string;
+  frequency: string;
+  instructions?: string;
+}
+
+/** Patient as added by pharmacy: basic info, medication, prescription, assigned device */
+export interface Patient {
+  id: string;
+  fullName: string;
+  phone: string;
+  email: string;
+  dateOfBirth: string;
+  address: string;
+  medications: PatientMedication[];
+  prescriptionNotes: string;
+  prescriptionFileName?: string;
+  assignedDeviceId: string | null;
+  assignedDeviceSerial?: string;
+  createdAt: string;
+}
+
+/** Device in inventory not yet assigned to a patient (for assign step in add-patient) */
+export interface UnassignedDevice {
+  id: string;
+  serialNumber: string;
 }
 
 export const mockDevices: Device[] = [
@@ -82,6 +114,17 @@ export const mockActivityLogs: ActivityLog[] = [
   { id: "LOG-008", deviceId: "DEV-006", timestamp: "2026-02-16 06:45", type: "dispense", description: "Morning medication dispensed successfully" },
   { id: "LOG-009", deviceId: "DEV-002", timestamp: "2026-02-15 14:00", type: "refill", description: "Device refilled — 30 pouches loaded" },
   { id: "LOG-010", deviceId: "DEV-001", timestamp: "2026-02-13 10:00", type: "start", description: "Device restarted after maintenance" },
+];
+
+/** Total hardware devices (inventory); assigned = mockDevices.length */
+export const mockTotalHardwareDevices = 10;
+
+/** Devices in stock not yet assigned to a patient (for add-patient flow) */
+export const mockUnassignedDevices: UnassignedDevice[] = [
+  { id: "DEV-007", serialNumber: "SN-2024-00107" },
+  { id: "DEV-008", serialNumber: "SN-2024-00108" },
+  { id: "DEV-009", serialNumber: "SN-2024-00109" },
+  { id: "DEV-010", serialNumber: "SN-2024-00110" },
 ];
 
 export const mockRefillNotifications: RefillNotification[] = [
