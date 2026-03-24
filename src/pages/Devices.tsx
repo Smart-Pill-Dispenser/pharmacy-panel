@@ -2,10 +2,13 @@ import React, { useState, useCallback, useMemo, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Monitor, Search, Filter, X } from "lucide-react";
 import StatusBadge from "@/components/StatusBadge";
-import { mockDevices } from "@/data/mockData";
+import type { Device } from "@/data/mockData";
+import { useQuery } from "@tanstack/react-query";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { pharmacyApi } from "@/api/pharmacy";
+import LoadingCard from "@/components/LoadingCard";
 
 const PAGE_SIZE_OPTIONS = [5, 10, 25, 50];
 
@@ -16,15 +19,23 @@ const Devices: React.FC = () => {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
 
+  const { data, isLoading, isError } = useQuery({
+    queryKey: ["pharmacy", "devices"],
+    queryFn: () => pharmacyApi.getDevices(),
+    staleTime: 30_000,
+  });
+
+  const devices = (data?.items ?? []) as Device[];
+
   const filtered = useMemo(
     () =>
-      mockDevices.filter((d) => {
+      devices.filter((d) => {
         const q = search.trim().toLowerCase();
         if (q && !d.patientName.toLowerCase().includes(q) && !d.id.toLowerCase().includes(q) && !d.serialNumber.toLowerCase().includes(q)) return false;
         if (statusFilter !== "all" && d.status !== statusFilter) return false;
         return true;
       }),
-    [search, statusFilter]
+    [devices, search, statusFilter]
   );
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
@@ -45,7 +56,7 @@ const Devices: React.FC = () => {
     setStatusFilter("all");
     setPage(1);
   }, []);
-  const isEmpty = mockDevices.length === 0;
+  const isEmpty = devices.length === 0;
   const hasNoResults = filtered.length === 0 && hasActiveFilters;
 
   return (
@@ -111,7 +122,15 @@ const Devices: React.FC = () => {
         )}
       </div>
 
-      {isEmpty && (
+      {isLoading && <LoadingCard message="Loading devices…" />}
+
+      {!isLoading && isError && (
+        <div className="rounded-xl border bg-card p-8 text-center">
+          <p className="text-sm text-destructive">Failed to load devices.</p>
+        </div>
+      )}
+
+      {!isLoading && !isError && isEmpty && (
         <div className="rounded-xl border border-dashed bg-card p-12 text-center">
           <Monitor className="mx-auto h-12 w-12 text-muted-foreground" />
           <h2 className="mt-4 text-lg font-semibold text-foreground">No devices yet</h2>
@@ -119,7 +138,7 @@ const Devices: React.FC = () => {
         </div>
       )}
 
-      {!isEmpty && hasNoResults && (
+      {!isLoading && !isError && !isEmpty && hasNoResults && (
         <div className="rounded-xl border bg-card p-12 text-center">
           <Search className="mx-auto h-12 w-12 text-muted-foreground" />
           <h2 className="mt-4 text-lg font-semibold text-foreground">No matching devices</h2>
@@ -130,7 +149,7 @@ const Devices: React.FC = () => {
         </div>
       )}
 
-      {!isEmpty && !hasNoResults && (
+      {!isLoading && !isError && !isEmpty && !hasNoResults && (
         <div className="rounded-xl border bg-card shadow-card overflow-hidden">
           <table className="w-full">
             <thead>

@@ -8,12 +8,14 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
-  mockUnassignedDevices,
   type Patient,
   type PatientMedication,
 } from "@/data/mockData";
 import { usePatients } from "@/contexts/PatientsContext";
 import { toast } from "sonner";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { pharmacyApi } from "@/api/pharmacy";
+import LoadingCard from "@/components/LoadingCard";
 
 const STEPS = [
   { id: 1, title: "Basic information", icon: User },
@@ -25,6 +27,7 @@ const STEPS = [
 const AddPatient: React.FC = () => {
   const navigate = useNavigate();
   const { addPatient } = usePatients();
+  const queryClient = useQueryClient();
   const [step, setStep] = useState(1);
 
   const [fullName, setFullName] = useState("");
@@ -40,6 +43,14 @@ const AddPatient: React.FC = () => {
   const [prescriptionFileName, setPrescriptionFileName] = useState("");
   const [assignedDeviceId, setAssignedDeviceId] = useState<string>("");
   const [assignedDeviceSerial, setAssignedDeviceSerial] = useState<string>("");
+
+  const { data: unassignedResp, isLoading: unassignedLoading, isError: unassignedError } = useQuery({
+    queryKey: ["pharmacy", "devices", "unassigned"],
+    queryFn: () => pharmacyApi.getUnassignedDevices(),
+    staleTime: 30_000,
+  });
+  const unassignedDevices = (unassignedResp?.items ?? []) as Array<{ id: string; serialNumber: string }>;
+  const [submitting, setSubmitting] = useState(false);
 
   const addMedicationRow = () => {
     setMedications((prev) => [...prev, { name: "", dosage: "", frequency: "", instructions: "" }]);
@@ -59,32 +70,70 @@ const AddPatient: React.FC = () => {
   const canProceedStep4 = !!assignedDeviceId;
 
   const handleAssignDevice = (id: string) => {
-    const dev = mockUnassignedDevices.find((d) => d.id === id);
+    const dev = unassignedDevices.find((d) => d.id === id);
     setAssignedDeviceId(id);
     setAssignedDeviceSerial(dev?.serialNumber ?? "");
   };
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
+    setSubmitting(true);
     const validMeds = medications.filter((m) => m.name.trim());
-    const patient: Patient = {
-      id: `PAT-${Date.now()}`,
-      fullName: fullName.trim(),
-      phone: phone.trim(),
-      email: email.trim(),
-      dateOfBirth: dateOfBirth.trim(),
-      address: address.trim(),
-      medications: validMeds,
-      prescriptionNotes: prescriptionNotes.trim(),
-      prescriptionFileName: prescriptionFileName || undefined,
-      assignedDeviceId: assignedDeviceId || null,
-      assignedDeviceSerial: assignedDeviceSerial || undefined,
-      createdAt: new Date().toISOString().slice(0, 19).replace("T", " "),
-    };
-    addPatient(patient);
-    toast.success("Patient added", {
-      description: `${patient.fullName} has been added and device ${patient.assignedDeviceId ?? "—"} assigned.`,
-    });
-    navigate("/patients");
+    try {
+      const body = {
+        fullName: fullName.trim(),
+        phone: phone.trim(),
+        email: email.trim() || undefined,
+        dateOfBirth: dateOfBirth.trim() || undefined,
+        address: address.trim() || undefined,
+        medications: validMeds,
+        prescriptionNotes: prescriptionNotes.trim() || undefined,
+        prescriptionFileName: prescriptionFileName || undefined,
+        assignedDeviceId: assignedDeviceId || undefined,
+        assignedDeviceSerial: assignedDeviceSerial || undefined,
+      };
+
+      const resp = await pharmacyApi.createPatient(body);
+      const created = (resp?.item ?? resp) as any;
+
+      // Backend returns `patientId` (not `id`), while UI expects `id`.
+      const patient: Patient = {
+        id: created.patientId ?? created.id,
+        fullName: created.fullName ?? body.fullName,
+        phone: created.phone ?? body.phone,
+        email: created.email ?? body.email ?? undefined,
+        dateOfBirth: created.dateOfBirth ?? body.dateOfBirth ?? undefined,
+        address: created.address ?? body.address ?? undefined,
+        medications: Array.isArray(created.medications) ? created.medications : validMeds,
+        prescriptionNotes: created.prescriptionNotes ?? body.prescriptionNotes ?? undefined,
+        prescriptionFileName: created.prescriptionFileName ?? body.prescriptionFileName ?? undefined,
+        assignedDeviceId: created.assignedDeviceId ?? assignedDeviceId ?? null,
+        assignedDeviceSerial: created.assignedDeviceSerial ?? assignedDeviceSerial ?? undefined,
+        createdAt: created.createdAt ?? new Date().toISOString(),
+      };
+
+      // Create device assignment so the Patients list reflects this.
+      if (assignedDeviceId && patient.id) {
+        await pharmacyApi.assignDeviceToPatient(assignedDeviceId, {
+          patientId: patient.id,
+          patientName: patient.fullName,
+        });
+      }
+
+      addPatient(patient);
+      toast.success("Patient added", {
+        description: `${patient.fullName} has been added and device ${patient.assignedDeviceId ?? "—"} assigned.`,
+      });
+
+      // Refresh real inventory and device-derived patient shells.
+      queryClient.invalidateQueries({ queryKey: ["pharmacy", "devices"] });
+      queryClient.invalidateQueries({ queryKey: ["pharmacy", "devices", "unassigned"] });
+      queryClient.invalidateQueries({ queryKey: ["pharmacy", "patients"] });
+      navigate("/patients");
+    } catch (e: any) {
+      toast.error(e?.message ?? "Failed to add patient");
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -294,7 +343,9 @@ const AddPatient: React.FC = () => {
               <p className="text-sm text-muted-foreground mb-4">
                 Select a device from inventory to assign to this patient. The device will be linked after you complete the flow.
               </p>
-              {mockUnassignedDevices.length === 0 ? (
+              {unassignedLoading ? (
+                <LoadingCard message="Loading unassigned devices…" />
+              ) : unassignedDevices.length === 0 ? (
                 <div className="rounded-xl border border-dashed bg-muted/30 p-8 text-center">
                   <Cpu className="mx-auto h-10 w-10 text-muted-foreground" />
                   <p className="mt-3 text-sm font-medium text-foreground">No unassigned devices</p>
@@ -311,7 +362,7 @@ const AddPatient: React.FC = () => {
                       </tr>
                     </thead>
                     <tbody className="divide-y">
-                      {mockUnassignedDevices.map((dev) => {
+                      {unassignedDevices.map((dev) => {
                         const selected = assignedDeviceId === dev.id;
                         return (
                           <tr
@@ -380,8 +431,8 @@ const AddPatient: React.FC = () => {
                 Next
               </Button>
             ) : (
-              <Button onClick={handleSubmit} disabled={!canProceedStep4}>
-                Add patient & assign device
+              <Button onClick={handleSubmit} disabled={!canProceedStep4 || submitting}>
+                {submitting ? "Adding patient…" : "Add patient & assign device"}
               </Button>
             )}
           </div>

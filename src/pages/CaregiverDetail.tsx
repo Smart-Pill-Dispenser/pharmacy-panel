@@ -1,26 +1,64 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { useParams, useNavigate, useLocation } from "react-router-dom";
 import { ArrowLeft, Users, Mail, Phone, Monitor } from "lucide-react";
-import { mockCaregivers } from "@/data/mockData";
 import type { Caregiver } from "@/data/mockData";
 import StatusBadge from "@/components/StatusBadge";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { pharmacyApi } from "@/api/pharmacy";
+import LoadingCard from "@/components/LoadingCard";
 
 const CaregiverDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const location = useLocation();
   const caregiverFromState = (location.state as { caregiver?: Caregiver })?.caregiver;
-  const caregiverStored = caregiverFromState ?? mockCaregivers.find((c) => c.id === id);
-  const [caregiver, setCaregiver] = useState<Caregiver | undefined>(caregiverStored);
+  const queryClient = useQueryClient();
+  const [caregiver, setCaregiver] = useState<Caregiver | undefined>(caregiverFromState);
 
-  React.useEffect(() => {
-    const stateCaregiver = (location.state as { caregiver?: Caregiver })?.caregiver;
-    const next = stateCaregiver ?? mockCaregivers.find((c) => c.id === id);
-    setCaregiver(next);
-  }, [id, location.state]);
+  const { data, isLoading, isError } = useQuery({
+    queryKey: ["pharmacy", "caregivers", id],
+    enabled: !!id,
+    queryFn: () => pharmacyApi.getCaregiver(id!),
+  });
+
+  const caregiverFromQuery = (data?.item ?? undefined) as Caregiver | undefined;
+
+  useEffect(() => {
+    if (caregiverFromQuery) setCaregiver(caregiverFromQuery);
+  }, [caregiverFromQuery]);
+
+  const updateCaregiverStatus = useMutation({
+    mutationFn: ({ isActive }: { isActive: boolean }) => pharmacyApi.updateCaregiverStatus(id!, { isActive }),
+    onMutate: ({ isActive }) => {
+      setCaregiver((prev) => (prev ? { ...prev, status: isActive ? "active" : "inactive" } : prev));
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["pharmacy", "caregivers", id] });
+      toast.success("Caregiver status updated");
+    },
+    onError: (e: any) => {
+      toast.error(e?.message ?? "Failed to update caregiver status");
+      queryClient.invalidateQueries({ queryKey: ["pharmacy", "caregivers", id] });
+    },
+  });
+
+  if (isLoading) {
+    return <LoadingCard message="Loading caregiver…" />;
+  }
+
+  if (!caregiver && isError) {
+    return (
+      <div className="flex flex-col items-center justify-center py-20">
+        <p className="text-destructive mb-4">Failed to load caregiver.</p>
+        <Button variant="outline" onClick={() => navigate("/caregivers")}>
+          Back to Caregivers
+        </Button>
+      </div>
+    );
+  }
 
   if (!caregiver) {
     return (
@@ -34,8 +72,7 @@ const CaregiverDetail: React.FC = () => {
   }
 
   const setStatus = (status: "active" | "inactive") => {
-    setCaregiver((prev) => (prev ? { ...prev, status } : prev));
-    toast.success(status === "active" ? "Caregiver enabled" : "Caregiver disabled");
+    updateCaregiverStatus.mutate({ isActive: status === "active" });
   };
 
   return (

@@ -1,7 +1,6 @@
 import React, { useState, useCallback, useMemo, useEffect } from "react";
 import { HelpCircle, Search, Filter, Calendar, X } from "lucide-react";
 import StatusBadge from "@/components/StatusBadge";
-import { mockHelpRequests } from "@/data/mockData";
 import type { HelpRequest } from "@/data/mockData";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -17,6 +16,9 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { toast } from "sonner";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { pharmacyApi } from "@/api/pharmacy";
+import LoadingCard from "@/components/LoadingCard";
 
 const PAGE_SIZE_OPTIONS = [5, 10, 25, 50];
 
@@ -32,7 +34,19 @@ const HelpSupport: React.FC = () => {
   const [dateTo, setDateTo] = useState("");
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
-  const [requests, setRequests] = useState(mockHelpRequests);
+  const queryClient = useQueryClient();
+  const [requests, setRequests] = useState<HelpRequest[]>([]);
+
+  const { data, isLoading, isError } = useQuery({
+    queryKey: ["pharmacy", "help-requests"],
+    queryFn: () => pharmacyApi.listHelpRequests({ limit: 200 }),
+    staleTime: 30_000,
+  });
+
+  useEffect(() => {
+    setRequests((data?.items ?? []) as HelpRequest[]);
+  }, [data]);
+
   const [resolveDialog, setResolveDialog] = useState<{ open: boolean; req: HelpRequest | null }>({ open: false, req: null });
   const [resolveIssue, setResolveIssue] = useState("");
   const [resolveReason, setResolveReason] = useState("");
@@ -86,19 +100,36 @@ const HelpSupport: React.FC = () => {
     setResolveReason("");
   };
 
+  const resolveMutation = useMutation({
+    mutationFn: ({ id, resolutionReason }: { id: string; resolutionReason?: string }) =>
+      pharmacyApi.resolveHelpRequest(id, { resolutionReason }),
+    onMutate: ({ id, resolutionReason }) => {
+      setRequests((prev) =>
+        prev.map((r) =>
+          r.id === id
+            ? { ...r, status: "resolved" as const, resolutionReason: resolutionReason?.trim() || undefined }
+            : r
+        )
+      );
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["pharmacy", "help-requests"] });
+      toast.success("Help request resolved", {
+        description: resolveReason.trim() ? "Resolution reason saved." : undefined,
+      });
+      closeResolveDialog();
+    },
+    onError: (e: any) => {
+      toast.error(e?.message ?? "Failed to resolve help request");
+      queryClient.invalidateQueries({ queryKey: ["pharmacy", "help-requests"] });
+    },
+  });
+
   const handleResolveSubmit = () => {
     if (!resolveDialog.req) return;
-    const id = resolveDialog.req.id;
-    setRequests((prev) =>
-      prev.map((r) =>
-        r.id === id
-          ? { ...r, status: "resolved" as const, resolutionReason: resolveReason.trim() || undefined }
-          : r
-      )
-    );
-    closeResolveDialog();
-    toast.success("Help request resolved", {
-      description: resolveReason.trim() ? "Resolution reason saved." : undefined,
+    resolveMutation.mutate({
+      id: resolveDialog.req.id,
+      resolutionReason: resolveReason.trim() || undefined,
     });
   };
 
@@ -173,7 +204,9 @@ const HelpSupport: React.FC = () => {
         )}
       </div>
 
-      {isEmpty && (
+      {isLoading && <LoadingCard message="Loading help requests…" />}
+
+      {!isLoading && !isError && isEmpty && (
         <div className="rounded-xl border border-dashed bg-card p-12 text-center">
           <HelpCircle className="mx-auto h-12 w-12 text-muted-foreground" />
           <h2 className="mt-4 text-lg font-semibold text-foreground">No help requests yet</h2>
@@ -183,7 +216,7 @@ const HelpSupport: React.FC = () => {
         </div>
       )}
 
-      {!isEmpty && hasNoResults && (
+      {!isLoading && !isError && !isEmpty && hasNoResults && (
         <div className="rounded-xl border bg-card p-12 text-center">
           <Search className="mx-auto h-12 w-12 text-muted-foreground" />
           <h2 className="mt-4 text-lg font-semibold text-foreground">No matching requests</h2>
@@ -194,7 +227,7 @@ const HelpSupport: React.FC = () => {
         </div>
       )}
 
-      {!isEmpty && !hasNoResults && (
+      {!isLoading && !isError && !isEmpty && !hasNoResults && (
         <div className="rounded-xl border bg-card shadow-card overflow-hidden">
           <table className="w-full">
             <thead>
@@ -295,7 +328,7 @@ const HelpSupport: React.FC = () => {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={closeResolveDialog}>Cancel</Button>
-            <Button onClick={handleResolveSubmit}>Resolve</Button>
+            <Button onClick={handleResolveSubmit} disabled={resolveMutation.isPending}>Resolve</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

@@ -1,12 +1,15 @@
 import React, { useState, useCallback, useMemo, useEffect } from "react";
 import { BarChart3, Calendar, Clock, Filter, Package, AlertTriangle, StopCircle, Play, HelpCircle, Search, X, ChevronDown, Check } from "lucide-react";
-import { mockActivityLogs, mockDevices } from "@/data/mockData";
+import type { ActivityLog, Device } from "@/data/mockData";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { cn } from "@/lib/utils";
+import { useQuery } from "@tanstack/react-query";
+import { pharmacyApi } from "@/api/pharmacy";
+import LoadingCard from "@/components/LoadingCard";
 
 const TYPE_OPTIONS: { value: string; label: string }[] = [
   { value: "all", label: "All types" },
@@ -36,9 +39,32 @@ const LogsAnalytics: React.FC = () => {
   const [typeDropdownOpen, setTypeDropdownOpen] = useState(false);
   const [deviceDropdownOpen, setDeviceDropdownOpen] = useState(false);
 
+  const { data: logsData, isLoading: logsLoading, isError: logsError } = useQuery({
+    queryKey: ["pharmacy", "logs"],
+    queryFn: () => pharmacyApi.listLogs({ limit: 200 }),
+    staleTime: 30_000,
+  });
+
+  const { data: devicesData, isLoading: devicesLoading, isError: devicesError } = useQuery({
+    queryKey: ["pharmacy", "devices", "for-logs"],
+    queryFn: () => pharmacyApi.getDevices(),
+    staleTime: 30_000,
+  });
+
+  const [logs, setLogs] = useState<ActivityLog[]>([]);
+  const [devices, setDevices] = useState<Device[]>([]);
+
+  useEffect(() => {
+    setLogs((logsData?.items ?? []) as ActivityLog[]);
+  }, [logsData]);
+
+  useEffect(() => {
+    setDevices((devicesData?.items ?? []) as Device[]);
+  }, [devicesData]);
+
   const filtered = useMemo(
     () =>
-      mockActivityLogs.filter((log) => {
+      logs.filter((log) => {
         const q = search.trim().toLowerCase();
         if (q && !log.description.toLowerCase().includes(q) && !log.deviceId.toLowerCase().includes(q) && !log.type.toLowerCase().includes(q) && !log.timestamp.includes(q)) return false;
         if (typeFilter !== "all" && log.type !== typeFilter) return false;
@@ -48,7 +74,7 @@ const LogsAnalytics: React.FC = () => {
         if (dateTo && logDate > new Date(dateTo + "T23:59:59")) return false;
         return true;
       }),
-    [search, typeFilter, deviceFilter, dateFrom, dateTo]
+    [logs, search, typeFilter, deviceFilter, dateFrom, dateTo]
   );
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
@@ -72,7 +98,7 @@ const LogsAnalytics: React.FC = () => {
     setDateTo("");
     setPage(1);
   }, []);
-  const isEmpty = mockActivityLogs.length === 0;
+  const isEmpty = logs.length === 0;
   const hasNoResults = filtered.length === 0 && hasActiveFilters;
 
   const logTypeIcons: Record<string, React.ReactNode> = {
@@ -197,7 +223,7 @@ const LogsAnalytics: React.FC = () => {
                         <Check className={cn("mr-2 h-4 w-4", deviceFilter === "all" ? "opacity-100" : "opacity-0")} />
                         All devices
                       </CommandItem>
-                      {mockDevices.map((d) => (
+                      {devices.map((d) => (
                         <CommandItem
                           key={d.id}
                           value={d.id}
@@ -235,6 +261,8 @@ const LogsAnalytics: React.FC = () => {
           </p>
         )}
       </div>
+
+      {(logsLoading || devicesLoading) && <LoadingCard message="Loading logs & analytics…" />}
 
       {isEmpty && (
         <div className="rounded-xl border border-dashed bg-card p-12 text-center">

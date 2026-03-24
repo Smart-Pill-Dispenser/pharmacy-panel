@@ -8,6 +8,7 @@ export interface StatCardProps {
   trend?: string;
   variant?: "default" | "warning" | "success" | "destructive" | "info";
   className?: string;
+  loading?: boolean;
 }
 
 const variantBorderStyles: Record<NonNullable<StatCardProps["variant"]>, string> = {
@@ -33,6 +34,7 @@ const StatCard: React.FC<StatCardProps> = ({
   trend,
   variant = "default",
   className,
+  loading = false,
 }) => {
   return (
     <div
@@ -45,14 +47,29 @@ const StatCard: React.FC<StatCardProps> = ({
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
           <p className="text-sm font-normal text-muted-foreground">{title}</p>
-          <p className="mt-1 text-2xl font-bold text-card-foreground">{value}</p>
-          {trend != null && trend !== "" && (
-            <p className="mt-1 text-xs text-muted-foreground">{trend}</p>
+          {loading ? (
+            <div className="mt-1 space-y-2">
+              <div className="h-8 w-3/4 rounded bg-muted/60 dark:bg-muted/40 animate-pulse" />
+              <div className="h-4 w-1/2 rounded bg-muted/60 dark:bg-muted/40 animate-pulse" />
+            </div>
+          ) : (
+            <>
+              <p className="mt-1 text-2xl font-bold text-card-foreground">{value}</p>
+              {trend != null && trend !== "" && (
+                <p className="mt-1 text-xs text-muted-foreground">{trend}</p>
+              )}
+            </>
           )}
         </div>
-        <div className={cn("flex h-11 w-11 shrink-0 items-center justify-center rounded-full", variantIconStyles[variant])}>
-          {icon}
-        </div>
+        {loading ? (
+          <div className={cn("flex h-11 w-11 shrink-0 items-center justify-center rounded-full", variantIconStyles[variant])}>
+            <div className="h-4 w-4 rounded-full bg-muted/60 dark:bg-muted/40 animate-pulse" />
+          </div>
+        ) : (
+          <div className={cn("flex h-11 w-11 shrink-0 items-center justify-center rounded-full", variantIconStyles[variant])}>
+            {icon}
+          </div>
+        )}
       </div>
     </div>
   );

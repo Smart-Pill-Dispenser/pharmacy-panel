@@ -4,6 +4,8 @@ import { Users, Search, Eye, Filter, X } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
+import { toast } from "sonner";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Table,
   TableBody,
@@ -21,17 +23,30 @@ import {
 } from "@/components/ui/select";
 import StatusBadge from "@/components/StatusBadge";
 import type { Caregiver } from "@/data/mockData";
-import { mockCaregivers } from "@/data/mockData";
+import { pharmacyApi } from "@/api/pharmacy";
+import LoadingCard from "@/components/LoadingCard";
 
 const PAGE_SIZE_OPTIONS = [5, 10, 25, 50];
 
 const Caregivers: React.FC = () => {
   const navigate = useNavigate();
-  const [caregivers, setCaregivers] = useState<Caregiver[]>(() => [...mockCaregivers]);
+  const queryClient = useQueryClient();
+  const [caregivers, setCaregivers] = useState<Caregiver[]>([]);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | "active" | "inactive">("all");
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
+
+  const { data, isLoading, isError } = useQuery({
+    queryKey: ["pharmacy", "caregivers"],
+    queryFn: () => pharmacyApi.listCaregivers({ limit: 500 }),
+    staleTime: 30_000,
+  });
+
+  useEffect(() => {
+    const items = (data?.items ?? []) as Caregiver[];
+    setCaregivers(items);
+  }, [data]);
 
   const filtered = useMemo(
     () => {
@@ -59,11 +74,23 @@ const Caregivers: React.FC = () => {
     [filtered, safePage, pageSize]
   );
 
-  const setCaregiverStatus = useCallback((id: string, status: "active" | "inactive") => {
-    setCaregivers((prev) =>
-      prev.map((c) => (c.id === id ? { ...c, status } : c))
-    );
-  }, []);
+  const updateCaregiverStatus = useMutation({
+    mutationFn: ({ id, isActive }: { id: string; isActive: boolean }) =>
+      pharmacyApi.updateCaregiverStatus(id, { isActive }),
+    onMutate: ({ id, isActive }) => {
+      setCaregivers((prev) =>
+        prev.map((c) => (c.id === id ? { ...c, status: isActive ? "active" : "inactive" } : c))
+      );
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["pharmacy", "caregivers"] });
+      toast.success("Caregiver status updated");
+    },
+    onError: (e: any) => {
+      toast.error(e?.message ?? "Failed to update caregiver status");
+      queryClient.invalidateQueries({ queryKey: ["pharmacy", "caregivers"] });
+    },
+  });
 
   const startItem = filtered.length === 0 ? 0 : (safePage - 1) * pageSize + 1;
   const endItem = Math.min(safePage * pageSize, filtered.length);
@@ -148,7 +175,15 @@ const Caregivers: React.FC = () => {
         )}
       </div>
 
-      {isEmpty && (
+      {isLoading && <LoadingCard message="Loading caregivers…" />}
+
+      {!isLoading && isError && (
+        <div className="rounded-xl border bg-card p-8 text-center">
+          <p className="text-sm text-destructive">Failed to load caregivers.</p>
+        </div>
+      )}
+
+      {!isLoading && !isError && isEmpty && (
         <div className="rounded-xl border border-dashed bg-card p-12 text-center">
           <Users className="mx-auto h-12 w-12 text-muted-foreground" />
           <h2 className="mt-4 text-lg font-semibold text-foreground">No caregivers yet</h2>
@@ -158,7 +193,7 @@ const Caregivers: React.FC = () => {
         </div>
       )}
 
-      {!isEmpty && hasNoResults && (
+      {!isLoading && !isError && !isEmpty && hasNoResults && (
         <div className="rounded-xl border bg-card p-12 text-center">
           <Search className="mx-auto h-12 w-12 text-muted-foreground" />
           <h2 className="mt-4 text-lg font-semibold text-foreground">No matching caregivers</h2>
@@ -169,7 +204,7 @@ const Caregivers: React.FC = () => {
         </div>
       )}
 
-      {!isEmpty && !hasNoResults && (
+      {!isLoading && !isError && !isEmpty && !hasNoResults && (
         <div className="rounded-xl border bg-card shadow-card overflow-hidden">
           <Table>
             <TableHeader>
@@ -222,8 +257,9 @@ const Caregivers: React.FC = () => {
                       </Button>
                       <Switch
                         checked={caregiver.status === "active"}
+                        disabled={updateCaregiverStatus.isPending}
                         onCheckedChange={(checked) =>
-                          setCaregiverStatus(caregiver.id, checked ? "active" : "inactive")
+                          updateCaregiverStatus.mutate({ id: caregiver.id, isActive: checked })
                         }
                       />
                     </div>

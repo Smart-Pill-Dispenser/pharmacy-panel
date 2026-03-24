@@ -3,9 +3,11 @@ import { useNavigate } from "react-router-dom";
 import { UserPlus, Users, Search, Monitor, Phone, Mail, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { mockDevices } from "@/data/mockData";
 import { usePatients } from "@/contexts/PatientsContext";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { useQuery } from "@tanstack/react-query";
+import { pharmacyApi } from "@/api/pharmacy";
+import LoadingCard from "@/components/LoadingCard";
 
 const PAGE_SIZE_OPTIONS = [5, 10, 25, 50];
 
@@ -16,14 +18,27 @@ const Patients: React.FC = () => {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
 
-  const fromDevices = mockDevices.map((d) => ({
-    id: d.id,
-    name: d.patientName,
-    deviceId: d.id,
-    serialNumber: d.serialNumber,
-    phone: undefined as string | undefined,
-    email: undefined as string | undefined,
-  }));
+  const { data, isLoading, isError } = useQuery({
+    queryKey: ["pharmacy", "patients"],
+    queryFn: () => pharmacyApi.listPatients({ limit: 5000 }),
+    staleTime: 30_000,
+  });
+
+  const apiPatients = useMemo(() => {
+    const items = (data?.items ?? []) as any[];
+    return items
+      .map((p) => ({
+        id: String(p.patientId ?? p.id ?? ""),
+        name: String(p.fullName ?? ""),
+        deviceId: typeof p.assignedDeviceId === "string" ? p.assignedDeviceId : undefined,
+        serialNumber: typeof p.assignedDeviceSerial === "string" ? p.assignedDeviceSerial : undefined,
+        phone: typeof p.phone === "string" ? p.phone : undefined,
+        email: typeof p.email === "string" ? p.email : undefined,
+      }))
+      .filter((p) => p.id && p.name);
+  }, [data]);
+
+  const apiPatientIds = useMemo(() => new Set(apiPatients.map((p) => p.id)), [apiPatients]);
   const fromAdded = addedPatients.map((p) => ({
     id: p.id,
     name: p.fullName,
@@ -33,7 +48,8 @@ const Patients: React.FC = () => {
     email: p.email || undefined,
   }));
 
-  const all = [...fromDevices, ...fromAdded];
+  const extraFromAdded = fromAdded.filter((p) => !apiPatientIds.has(p.id));
+  const all = [...apiPatients, ...extraFromAdded];
 
   const filtered = useMemo(
     () =>
@@ -45,7 +61,7 @@ const Patients: React.FC = () => {
           (r.phone && r.phone.includes(search.trim())) ||
           (r.email && r.email.toLowerCase().includes(search.trim().toLowerCase()))
       ),
-    [search, addedPatients]
+    [search, all]
   );
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
@@ -107,7 +123,15 @@ const Patients: React.FC = () => {
         )}
       </div>
 
-      {isEmpty && (
+      {isLoading && <LoadingCard message="Loading patients…" />}
+
+      {!isLoading && isError && (
+        <div className="rounded-xl border bg-card p-8 text-center">
+          <p className="text-sm text-destructive">Failed to load patients.</p>
+        </div>
+      )}
+
+      {!isLoading && !isError && isEmpty && (
         <div className="rounded-xl border border-dashed bg-card p-12 text-center">
           <Users className="mx-auto h-12 w-12 text-muted-foreground" />
           <h2 className="mt-4 text-lg font-semibold text-foreground">No patients yet</h2>
@@ -119,7 +143,7 @@ const Patients: React.FC = () => {
         </div>
       )}
 
-      {!isEmpty && hasNoResults && (
+      {!isLoading && !isError && !isEmpty && hasNoResults && (
         <div className="rounded-xl border bg-card p-12 text-center">
           <Search className="mx-auto h-12 w-12 text-muted-foreground" />
           <h2 className="mt-4 text-lg font-semibold text-foreground">No matching patients</h2>
@@ -128,7 +152,7 @@ const Patients: React.FC = () => {
         </div>
       )}
 
-      {!isEmpty && !hasNoResults && (
+      {!isLoading && !isError && !isEmpty && !hasNoResults && (
         <div className="rounded-xl border bg-card shadow-card overflow-hidden">
           <table className="w-full">
             <thead>

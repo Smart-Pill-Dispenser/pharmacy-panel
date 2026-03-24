@@ -92,9 +92,6 @@ const Login: React.FC = () => {
             </Button>
           </form>
 
-          <p className="mt-6 text-center text-sm text-muted-foreground">
-            Contact your administrator for access credentials
-          </p>
         </div>
       </div>
     </div>

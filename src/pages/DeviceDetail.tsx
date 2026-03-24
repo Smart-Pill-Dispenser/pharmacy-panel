@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { ArrowLeft, Monitor, StopCircle, Play, AlertTriangle, Clock, Package, User, Calendar, FileText } from "lucide-react";
-import { mockDevices, mockActivityLogs } from "@/data/mockData";
+import type { ActivityLog, Device } from "@/data/mockData";
 import StatusBadge from "@/components/StatusBadge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -15,6 +15,9 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { toast } from "sonner";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { pharmacyApi } from "@/api/pharmacy";
+import LoadingCard from "@/components/LoadingCard";
 
 const LOG_PAGE_SIZE_OPTIONS = [5, 10, 25, 50];
 
@@ -26,6 +29,8 @@ function parseLogDate(ts: string): Date {
 const DeviceDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
+
   const [showStopDialog, setShowStopDialog] = useState(false);
   const [deviceStatus, setDeviceStatus] = useState<string | null>(null);
   const [logDateFrom, setLogDateFrom] = useState("");
@@ -33,9 +38,33 @@ const DeviceDetail: React.FC = () => {
   const [logPage, setLogPage] = useState(1);
   const [logPageSize, setLogPageSize] = useState(10);
 
-  const device = mockDevices.find((d) => d.id === id);
+  const {
+    data: deviceResp,
+    isLoading: deviceLoading,
+    isError: deviceError,
+  } = useQuery({
+    queryKey: ["pharmacy", "devices", id],
+    enabled: !!id,
+    queryFn: () => pharmacyApi.getDevice(id!),
+  });
+
+  const device = deviceResp?.item as Device | undefined;
+
+  const {
+    data: logsResp,
+    isLoading: logsLoading,
+    isError: logsError,
+  } = useQuery({
+    queryKey: ["pharmacy", "devices", id, "logs"],
+    enabled: !!id,
+    queryFn: () => pharmacyApi.getDeviceLogs(id!, { limit: 200 }),
+    staleTime: 15_000,
+  });
+
+  const logsAll = (logsResp?.items ?? []) as ActivityLog[];
+
   const logs = useMemo(() => {
-    let list = (id ? mockActivityLogs.filter((l) => l.deviceId === id) : []) as typeof mockActivityLogs;
+    let list = logsAll;
     if (logDateFrom || logDateTo) {
       list = list.filter((l) => {
         const d = parseLogDate(l.timestamp);
@@ -44,8 +73,11 @@ const DeviceDetail: React.FC = () => {
         return true;
       });
     }
-    return [...list].sort((a, b) => new Date(b.timestamp.replace(" ", "T")).getTime() - new Date(a.timestamp.replace(" ", "T")).getTime());
-  }, [id, logDateFrom, logDateTo]);
+    return [...list].sort(
+      (a, b) =>
+        new Date(b.timestamp.replace(" ", "T")).getTime() - new Date(a.timestamp.replace(" ", "T")).getTime()
+    );
+  }, [logsAll, logDateFrom, logDateTo]);
 
   const logTotalPages = Math.max(1, Math.ceil(logs.length / logPageSize));
   const logSafePage = Math.min(Math.max(1, logPage), logTotalPages);
@@ -62,6 +94,43 @@ const DeviceDetail: React.FC = () => {
   const logStartItem = logs.length === 0 ? 0 : (logSafePage - 1) * logPageSize + 1;
   const logEndItem = Math.min(logSafePage * logPageSize, logs.length);
 
+  const stopMutation = useMutation({
+    mutationFn: () => pharmacyApi.stopDispensing(device!.id),
+    onSuccess: () => {
+      setDeviceStatus("stopped");
+      queryClient.invalidateQueries({ queryKey: ["pharmacy", "devices", id] });
+      queryClient.invalidateQueries({ queryKey: ["pharmacy", "devices", id, "logs"] });
+      setShowStopDialog(false);
+      toast.success("Dispensing stopped");
+    },
+    onError: (e: any) => toast.error(e?.message ?? "Failed to stop dispensing"),
+  });
+
+  const resumeMutation = useMutation({
+    mutationFn: () => pharmacyApi.resumeDispensing(device!.id),
+    onSuccess: () => {
+      setDeviceStatus("online");
+      queryClient.invalidateQueries({ queryKey: ["pharmacy", "devices", id] });
+      toast.success("Dispensing resumed");
+    },
+    onError: (e: any) => toast.error(e?.message ?? "Failed to resume dispensing"),
+  });
+
+  if (deviceLoading || logsLoading) {
+    return <LoadingCard message="Loading device…" />;
+  }
+
+  if (!device && (deviceError || logsError)) {
+    return (
+      <div className="flex flex-col items-center justify-center py-20">
+        <p className="text-destructive mb-4">Failed to load device.</p>
+        <Button variant="outline" onClick={() => navigate("/devices")}>
+          Back to Devices
+        </Button>
+      </div>
+    );
+  }
+
   if (!device) {
     return (
       <div className="flex flex-col items-center justify-center py-20">
@@ -74,16 +143,8 @@ const DeviceDetail: React.FC = () => {
   const currentStatus = deviceStatus || device.status;
   const needsRefill = device.remainingPouches <= device.refillThreshold;
 
-  const handleStopDispensing = () => {
-    setDeviceStatus("stopped");
-    setShowStopDialog(false);
-    toast.success("Dispensing stopped", { description: `Stop command sent to ${device.id}` });
-  };
-
-  const handleResumeDispensing = () => {
-    setDeviceStatus("online");
-    toast.success("Dispensing resumed", { description: `Resume command sent to ${device.id}` });
-  };
+  const handleStopDispensing = () => stopMutation.mutate();
+  const handleResumeDispensing = () => resumeMutation.mutate();
 
   const logTypeIcons: Record<string, React.ReactNode> = {
     dispense: <Package className="h-4 w-4 text-success" />,
