@@ -83,6 +83,8 @@ export interface Patient {
   prescriptionFileName?: string;
   assignedDeviceId: string | null;
   assignedDeviceSerial?: string;
+  /** YYYY-MM-DD — device assignment valid until (pharmacy panel). */
+  assignedDeviceValidUntil?: string;
   createdAt: string;
 }
 

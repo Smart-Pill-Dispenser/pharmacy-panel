@@ -19,6 +19,7 @@ import {
 import { toast } from "sonner";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { pharmacyApi } from "@/api/pharmacy";
+import { sortRecordsNewestFirst } from "@/lib/listSort";
 import LoadingCard from "@/components/LoadingCard";
 
 const PAGE_SIZE_OPTIONS = [5, 10, 25, 50];
@@ -45,7 +46,8 @@ const HelpSupport: React.FC = () => {
   });
 
   useEffect(() => {
-    setRequests((data?.items ?? []) as HelpRequest[]);
+    const items = sortRecordsNewestFirst([...(data?.items ?? [])] as Record<string, unknown>[], ["timestamp", "createdAt"]);
+    setRequests(items as HelpRequest[]);
   }, [data]);
 
   const [resolveDialog, setResolveDialog] = useState<{ open: boolean; req: HelpRequest | null }>({ open: false, req: null });

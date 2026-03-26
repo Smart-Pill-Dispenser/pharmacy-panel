@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { ArrowLeft, User, Phone, Mail, Calendar, MapPin, Pill, FileText, Monitor, UserMinus } from "lucide-react";
+import { ArrowLeft, User, Phone, Mail, Calendar, MapPin, Pill, FileText, Monitor, UserMinus, Pencil } from "lucide-react";
 import type { Patient } from "@/data/mockData";
 import { usePatients } from "@/contexts/PatientsContext";
 import { Button } from "@/components/ui/button";
@@ -18,6 +18,14 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { toast } from "sonner";
+
+function formatIsoDateShort(iso: string | undefined): string {
+  const t = (iso ?? "").trim();
+  if (!t) return "—";
+  const d = new Date(t + "T12:00:00");
+  if (Number.isNaN(d.getTime())) return t;
+  return d.toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
+}
 
 const PatientDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -69,6 +77,10 @@ const PatientDetail: React.FC = () => {
       prescriptionFileName: typeof p.prescriptionFileName === "string" ? p.prescriptionFileName : undefined,
       assignedDeviceId: typeof p.assignedDeviceId === "string" ? p.assignedDeviceId : null,
       assignedDeviceSerial: typeof p.assignedDeviceSerial === "string" ? p.assignedDeviceSerial : undefined,
+      assignedDeviceValidUntil:
+        typeof p.assignedDeviceValidUntil === "string" && p.assignedDeviceValidUntil.trim()
+          ? p.assignedDeviceValidUntil.trim()
+          : undefined,
       createdAt: String(p.createdAt ?? ""),
     };
   }, [patientResp]);
@@ -109,6 +121,12 @@ const PatientDetail: React.FC = () => {
               <p className="text-sm text-muted-foreground">Added by pharmacy · {patient.id}</p>
             </div>
           </div>
+          {patientApi && id ? (
+            <Button variant="outline" size="sm" className="gap-1.5 shrink-0" onClick={() => navigate(`/patients/${encodeURIComponent(id)}/edit`)}>
+              <Pencil className="h-4 w-4" />
+              Edit details
+            </Button>
+          ) : null}
         </div>
 
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -195,6 +213,24 @@ const PatientDetail: React.FC = () => {
                   </p>
                 );
               })()}
+              <div className="text-xs space-y-1.5 pt-3 mt-3 border-t border-border/60">
+                <p className="text-muted-foreground">
+                  Valid until{" "}
+                  <span className="text-foreground font-medium">
+                    {patient.assignedDeviceValidUntil?.trim()
+                      ? patient.assignedDeviceValidUntil
+                      : "—"}
+                  </span>
+                  {patient.assignedDeviceValidUntil?.trim() ? (
+                    <span className="text-muted-foreground font-normal">
+                      {" "}
+                      ({formatIsoDateShort(patient.assignedDeviceValidUntil)})
+                    </span>
+                  ) : (
+                    <span className="font-normal"> · Edit patient to set an end date</span>
+                  )}
+                </p>
+              </div>
             </CardContent>
           </Card>
         )}

@@ -230,6 +230,12 @@ export async function pharmacyPatch<T>(path: string, body: unknown, skipAuth = f
   return (text ? JSON.parse(text) : undefined) as T;
 }
 
+export async function pharmacyDelete<T>(path: string, skipAuth = false): Promise<T> {
+  const res = await pharmacyFetch(path, { method: "DELETE", skipAuth });
+  const text = await res.text();
+  return (text ? JSON.parse(text) : undefined) as T;
+}
+
 export const pharmacyTokenStorage = {
   getStoredEmail,
   storeAccessToken,

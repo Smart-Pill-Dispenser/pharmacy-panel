@@ -4,6 +4,7 @@ import type { Patient } from "@/data/mockData";
 interface PatientsContextValue {
   patients: Patient[];
   addPatient: (patient: Patient) => void;
+  removePatient: (patientId: string) => void;
 }
 
 const PatientsContext = createContext<PatientsContextValue | null>(null);
@@ -13,8 +14,11 @@ export const PatientsProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const addPatient = useCallback((patient: Patient) => {
     setPatients((prev) => [...prev, patient]);
   }, []);
+  const removePatient = useCallback((patientId: string) => {
+    setPatients((prev) => prev.filter((p) => p.id !== patientId));
+  }, []);
   return (
-    <PatientsContext.Provider value={{ patients, addPatient }}>
+    <PatientsContext.Provider value={{ patients, addPatient, removePatient }}>
       {children}
     </PatientsContext.Provider>
   );

@@ -1,6 +1,6 @@
 import React, { useState, useCallback, useMemo, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { Users, Search, Eye, Filter, X } from "lucide-react";
+import { Users, Search, Eye, Filter, X, Trash2 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
@@ -21,9 +21,19 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  AlertDialog,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import StatusBadge from "@/components/StatusBadge";
 import type { Caregiver } from "@/data/mockData";
 import { pharmacyApi } from "@/api/pharmacy";
+import { sortRecordsNewestFirst } from "@/lib/listSort";
 import LoadingCard from "@/components/LoadingCard";
 
 const PAGE_SIZE_OPTIONS = [5, 10, 25, 50];
@@ -36,6 +46,7 @@ const Caregivers: React.FC = () => {
   const [statusFilter, setStatusFilter] = useState<"all" | "active" | "inactive">("all");
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
+  const [removeTarget, setRemoveTarget] = useState<Caregiver | null>(null);
 
   const { data, isLoading, isError } = useQuery({
     queryKey: ["pharmacy", "caregivers"],
@@ -44,7 +55,7 @@ const Caregivers: React.FC = () => {
   });
 
   useEffect(() => {
-    const items = (data?.items ?? []) as Caregiver[];
+    const items = sortRecordsNewestFirst([...(data?.items ?? [])] as Record<string, unknown>[], ["createdAt", "updatedAt"]) as Caregiver[];
     setCaregivers(items);
   }, [data]);
 
@@ -90,6 +101,16 @@ const Caregivers: React.FC = () => {
       toast.error(e?.message ?? "Failed to update caregiver status");
       queryClient.invalidateQueries({ queryKey: ["pharmacy", "caregivers"] });
     },
+  });
+
+  const deleteCaregiver = useMutation({
+    mutationFn: (id: string) => pharmacyApi.deleteCaregiver(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["pharmacy", "caregivers"] });
+      toast.success("Caregiver removed");
+      setRemoveTarget(null);
+    },
+    onError: (e: Error) => toast.error(e?.message ?? "Failed to remove caregiver"),
   });
 
   const startItem = filtered.length === 0 ? 0 : (safePage - 1) * pageSize + 1;
@@ -266,12 +287,50 @@ const Caregivers: React.FC = () => {
                           updateCaregiverStatus.mutate({ id: caregiver.id, isActive: checked })
                         }
                       />
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 text-destructive hover:text-destructive"
+                        title="Remove caregiver"
+                        aria-label="Remove caregiver"
+                        disabled={deleteCaregiver.isPending}
+                        onClick={() => setRemoveTarget(caregiver)}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
                     </div>
                   </TableCell>
                 </TableRow>
               ))}
             </TableBody>
           </Table>
+
+          <AlertDialog open={removeTarget != null} onOpenChange={(o) => !o && !deleteCaregiver.isPending && setRemoveTarget(null)}>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Remove caregiver?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  {removeTarget ? (
+                    <>
+                      Permanently delete <span className="font-medium text-foreground">{removeTarget.name}</span> (
+                      {removeTarget.id}). This cannot be undone.
+                    </>
+                  ) : null}
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel disabled={deleteCaregiver.isPending}>Cancel</AlertDialogCancel>
+                <Button
+                  variant="destructive"
+                  disabled={deleteCaregiver.isPending || !removeTarget}
+                  onClick={() => removeTarget && deleteCaregiver.mutate(removeTarget.id)}
+                >
+                  {deleteCaregiver.isPending ? "Removing…" : "Remove"}
+                </Button>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
 
           <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 px-4 py-3 border-t bg-muted/30">
             <div className="flex items-center gap-2">

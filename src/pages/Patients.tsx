@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { UserPlus, Users, Search, Monitor, Phone, Mail, X, UserMinus } from "lucide-react";
+import { UserPlus, Users, Search, Monitor, Phone, Mail, X, UserMinus, Trash2, Pencil } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { usePatients } from "@/contexts/PatientsContext";
@@ -16,6 +16,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { pharmacyApi } from "@/api/pharmacy";
+import { sortRecordsNewestFirst } from "@/lib/listSort";
 import LoadingCard from "@/components/LoadingCard";
 import { toast } from "sonner";
 
@@ -24,11 +25,12 @@ const PAGE_SIZE_OPTIONS = [5, 10, 25, 50];
 const Patients: React.FC = () => {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const { patients: addedPatients } = usePatients();
+  const { patients: addedPatients, removePatient: removeLocalPatient } = usePatients();
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const [unassignTarget, setUnassignTarget] = useState<{ deviceId: string; patientName: string } | null>(null);
+  const [removePatientTarget, setRemovePatientTarget] = useState<{ id: string; name: string } | null>(null);
 
   const unassignMutation = useMutation({
     mutationFn: (deviceId: string) => pharmacyApi.unassignDevice(deviceId),
@@ -45,6 +47,20 @@ const Patients: React.FC = () => {
     },
   });
 
+  const deletePatientMutation = useMutation({
+    mutationFn: (patientId: string) => pharmacyApi.deletePatient(patientId),
+    onSuccess: async (_, patientId) => {
+      removeLocalPatient(patientId);
+      await queryClient.invalidateQueries({ queryKey: ["pharmacy", "patients"] });
+      await queryClient.invalidateQueries({ queryKey: ["pharmacy", "devices"] });
+      await queryClient.invalidateQueries({ queryKey: ["pharmacy", "devices", "unassigned"] });
+      await queryClient.invalidateQueries({ queryKey: ["pharmacy", "dashboard"] });
+      toast.success("Patient removed");
+      setRemovePatientTarget(null);
+    },
+    onError: (e: Error) => toast.error(e?.message ?? "Failed to remove patient"),
+  });
+
   const { data, isLoading, isError } = useQuery({
     queryKey: ["pharmacy", "patients"],
     queryFn: () => pharmacyApi.listPatients({ limit: 5000 }),
@@ -53,7 +69,7 @@ const Patients: React.FC = () => {
 
   const apiPatients = useMemo(() => {
     const items = (data?.items ?? []) as any[];
-    return items
+    const mapped = items
       .map((p) => ({
         id: String(p.patientId ?? p.id ?? ""),
         name: String(p.fullName ?? ""),
@@ -61,8 +77,10 @@ const Patients: React.FC = () => {
         serialNumber: typeof p.assignedDeviceSerial === "string" ? p.assignedDeviceSerial : undefined,
         phone: typeof p.phone === "string" ? p.phone : undefined,
         email: typeof p.email === "string" ? p.email : undefined,
+        createdAt: typeof p.createdAt === "string" ? p.createdAt : undefined,
       }))
       .filter((p) => p.id && p.name);
+    return sortRecordsNewestFirst(mapped as Record<string, unknown>[], ["createdAt", "updatedAt"]) as typeof mapped;
   }, [data]);
 
   const apiPatientIds = useMemo(() => new Set(apiPatients.map((p) => p.id)), [apiPatients]);
@@ -76,7 +94,8 @@ const Patients: React.FC = () => {
   }));
 
   const extraFromAdded = fromAdded.filter((p) => !apiPatientIds.has(p.id));
-  const all = [...apiPatients, ...extraFromAdded];
+  const combinedPatients = [...apiPatients, ...extraFromAdded];
+  const all = sortRecordsNewestFirst(combinedPatients as Record<string, unknown>[], ["createdAt", "updatedAt"]) as typeof combinedPatients;
 
   const filtered = useMemo(
     () =>
@@ -180,6 +199,40 @@ const Patients: React.FC = () => {
       )}
 
       <AlertDialog
+        open={removePatientTarget != null}
+        onOpenChange={(open) => {
+          if (!open && !deletePatientMutation.isPending) setRemovePatientTarget(null);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Remove patient?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {removePatientTarget ? (
+                <>
+                  This permanently deletes{" "}
+                  <span className="font-medium text-foreground">{removePatientTarget.name}</span> and unassigns any linked
+                  device. This cannot be undone.
+                </>
+              ) : null}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deletePatientMutation.isPending}>Cancel</AlertDialogCancel>
+            <Button
+              variant="destructive"
+              disabled={deletePatientMutation.isPending || !removePatientTarget}
+              onClick={() => {
+                if (removePatientTarget) deletePatientMutation.mutate(removePatientTarget.id);
+              }}
+            >
+              {deletePatientMutation.isPending ? "Removing…" : "Remove patient"}
+            </Button>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog
         open={unassignTarget != null}
         onOpenChange={(open) => {
           if (!open && !unassignMutation.isPending) setUnassignTarget(null);
@@ -222,6 +275,9 @@ const Patients: React.FC = () => {
                 <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider hidden sm:table-cell">Phone</th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider hidden md:table-cell">Email</th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Device</th>
+                <th className="px-4 py-3 text-right text-xs font-medium text-muted-foreground uppercase tracking-wider w-[120px]">
+                  Actions
+                </th>
               </tr>
             </thead>
             <tbody className="divide-y">
@@ -283,6 +339,33 @@ const Patients: React.FC = () => {
                     ) : (
                       "—"
                     )}
+                  </td>
+                  <td className="px-4 py-3 text-right" onClick={(e) => e.stopPropagation()}>
+                    <div className="inline-flex items-center justify-end gap-0.5">
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 text-primary hover:text-primary"
+                        title="Edit patient"
+                        aria-label="Edit patient"
+                        onClick={() => navigate(`/patients/${encodeURIComponent(r.id)}/edit`)}
+                      >
+                        <Pencil className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 text-destructive hover:text-destructive"
+                        disabled={deletePatientMutation.isPending}
+                        title="Remove patient"
+                        aria-label="Remove patient"
+                        onClick={() => setRemovePatientTarget({ id: r.id, name: r.name })}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
                   </td>
                 </tr>
               ))}

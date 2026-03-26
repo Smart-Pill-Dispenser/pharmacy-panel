@@ -32,6 +32,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { toast } from "sonner";
 import { usePatients } from "@/contexts/PatientsContext";
+import { recordTimeMs, sortRecordsNewestFirst } from "@/lib/listSort";
 
 type DeviceRow = {
   id: string;
@@ -173,21 +174,24 @@ const Devices: React.FC = () => {
   }, [patientsForAssign]);
 
   const rows: DeviceRow[] = useMemo(() => {
-    const orgItems = (devicesData?.items ?? []) as Record<string, unknown>[];
+    const orgItemsSorted = sortRecordsNewestFirst([...(devicesData?.items ?? [])] as Record<string, unknown>[], [
+      "createdAt",
+      "lastActionAt",
+    ]);
     const globalSlim = (unassignedData as { globalPool?: { id: string; serialNumber?: string }[] })?.globalPool ?? [];
 
-    const fromOrg: DeviceRow[] = orgItems.map((d) => {
+    const orgTagged = orgItemsSorted.map((d) => {
       const did = String(d.id ?? "");
       const merged = mergePatientFromAssignments(did, patientInfoFromDevice(d), patientByDeviceId);
       return {
+        row: { id: did, patientId: merged.patientId, patientLabel: merged.patientLabel } satisfies DeviceRow,
+        ms: recordTimeMs(d.createdAt ?? d.lastActionAt),
         id: did,
-        patientId: merged.patientId,
-        patientLabel: merged.patientLabel,
       };
     });
 
-    const seen = new Set(fromOrg.map((r) => r.id));
-    const fromGlobal: DeviceRow[] = globalSlim
+    const seen = new Set(orgTagged.map((t) => t.id));
+    const globalTagged = globalSlim
       .filter((d) => d.id && !seen.has(d.id))
       .map((d) => {
         const merged = mergePatientFromAssignments(
@@ -196,13 +200,19 @@ const Devices: React.FC = () => {
           patientByDeviceId
         );
         return {
+          row: {
+            id: d.id,
+            patientId: merged.patientId,
+            patientLabel: merged.patientLabel,
+          } satisfies DeviceRow,
+          ms: 0,
           id: d.id,
-          patientId: merged.patientId,
-          patientLabel: merged.patientLabel,
         };
       });
 
-    return [...fromOrg, ...fromGlobal];
+    return [...orgTagged, ...globalTagged]
+      .sort((a, b) => (b.ms !== a.ms ? b.ms - a.ms : b.id.localeCompare(a.id, undefined, { numeric: true })))
+      .map((t) => t.row);
   }, [devicesData, unassignedData, patientByDeviceId]);
 
   const filtered = useMemo(() => {
@@ -466,6 +476,9 @@ const Devices: React.FC = () => {
                 <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
                   Patient
                 </th>
+                <th className="px-4 py-3 text-right text-xs font-medium text-muted-foreground uppercase tracking-wider w-[140px]">
+                  Actions
+                </th>
               </tr>
             </thead>
             <tbody className="divide-y">
@@ -483,27 +496,31 @@ const Devices: React.FC = () => {
                   </td>
                   <td className="px-4 py-3 text-sm" onClick={(e) => e.stopPropagation()}>
                     {row.patientId && row.patientLabel ? (
-                      <div className="flex flex-wrap items-center gap-2">
-                        <Link
-                          to={`/patients/${row.patientId}`}
-                          className="font-medium text-primary hover:underline focus:outline-none focus:underline"
-                        >
-                          {row.patientLabel}
-                        </Link>
-                        <Button
-                          type="button"
-                          variant="destructive"
-                          size="sm"
-                          className="h-8 gap-1.5"
-                          disabled={unassignMutation.isPending}
-                          onClick={() =>
-                            setUnassignTarget({ deviceId: row.id, patientLabel: row.patientLabel ?? "Patient" })
-                          }
-                        >
-                          <UserMinus className="h-4 w-4 shrink-0" aria-hidden />
-                          Unassign
-                        </Button>
-                      </div>
+                      <Link
+                        to={`/patients/${row.patientId}`}
+                        className="font-medium text-primary hover:underline focus:outline-none focus:underline"
+                      >
+                        {row.patientLabel}
+                      </Link>
+                    ) : (
+                      <span className="text-muted-foreground">—</span>
+                    )}
+                  </td>
+                  <td className="px-4 py-3 text-right" onClick={(e) => e.stopPropagation()}>
+                    {row.patientId && row.patientLabel ? (
+                      <Button
+                        type="button"
+                        variant="destructive"
+                        size="sm"
+                        className="h-8 gap-1.5"
+                        disabled={unassignMutation.isPending}
+                        onClick={() =>
+                          setUnassignTarget({ deviceId: row.id, patientLabel: row.patientLabel ?? "Patient" })
+                        }
+                      >
+                        <UserMinus className="h-4 w-4 shrink-0" aria-hidden />
+                        Unassign
+                      </Button>
                     ) : (
                       <Button
                         type="button"

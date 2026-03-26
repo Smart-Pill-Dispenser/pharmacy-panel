@@ -1,4 +1,4 @@
-import { pharmacyGet, pharmacyPatch, pharmacyPost } from "./client";
+import { pharmacyDelete, pharmacyGet, pharmacyPatch, pharmacyPost } from "./client";
 import type { ListResponse, LoginResponse, MeResponse, RefreshResponse } from "./types";
 
 // The backend responses are envelopes; we keep client-side typing flexible.
@@ -157,8 +157,20 @@ export const pharmacyApi = {
     return pharmacyGet<{ item: any }>(`pharmacy/patients/${encodeURIComponent(id)}`);
   },
 
+  async deletePatient(id: string): Promise<{ deleted: boolean }> {
+    return pharmacyDelete<{ deleted: boolean }>(`pharmacy/patients/${encodeURIComponent(id)}`);
+  },
+
   async createPatient(body: any): Promise<any> {
     return pharmacyPost<any>("pharmacy/patients", body);
+  },
+
+  async updatePatient(id: string, body: Record<string, unknown>): Promise<{ item: any }> {
+    return pharmacyPatch<{ item: any }>(`pharmacy/patients/${encodeURIComponent(id)}`, body);
+  },
+
+  async deleteCaregiver(id: string): Promise<{ deleted: boolean }> {
+    return pharmacyDelete<{ deleted: boolean }>(`pharmacy/caregivers/${encodeURIComponent(id)}`);
   },
 };
 

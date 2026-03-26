@@ -116,8 +116,9 @@ const AppRoutes = () => (
       <Route path="caregivers" element={<Caregivers />} />
       <Route path="caregivers/:id" element={<CaregiverDetail />} />
       <Route path="patients" element={<Patients />} />
-      <Route path="patients/:id" element={<PatientDetail />} />
       <Route path="patients/add" element={<AddPatient />} />
+      <Route path="patients/:id/edit" element={<AddPatient />} />
+      <Route path="patients/:id" element={<PatientDetail />} />
       <Route path="help-support" element={<HelpSupport />} />
       <Route path="logs" element={<LogsAnalytics />} />
     </Route>

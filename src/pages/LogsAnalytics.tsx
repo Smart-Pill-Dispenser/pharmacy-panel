@@ -10,6 +10,7 @@ import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, Command
 import { cn } from "@/lib/utils";
 import { useQuery } from "@tanstack/react-query";
 import { pharmacyApi } from "@/api/pharmacy";
+import { sortRecordsNewestFirst } from "@/lib/listSort";
 import LoadingCard from "@/components/LoadingCard";
 
 const TYPE_OPTIONS: { value: string; label: string }[] = [
@@ -56,11 +57,15 @@ const LogsAnalytics: React.FC = () => {
   const [devices, setDevices] = useState<Device[]>([]);
 
   useEffect(() => {
-    setLogs((logsData?.items ?? []) as ActivityLog[]);
+    const raw = logsData?.items ?? [];
+    const sorted = sortRecordsNewestFirst([...raw] as Record<string, unknown>[], ["timestamp"]);
+    setLogs(sorted as ActivityLog[]);
   }, [logsData]);
 
   useEffect(() => {
-    setDevices((devicesData?.items ?? []) as Device[]);
+    const raw = devicesData?.items ?? [];
+    const sorted = sortRecordsNewestFirst([...raw] as Record<string, unknown>[], ["createdAt", "lastActionAt"]);
+    setDevices(sorted as Device[]);
   }, [devicesData]);
 
   const filtered = useMemo(

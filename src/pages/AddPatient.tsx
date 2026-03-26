@@ -1,5 +1,5 @@
-import React, { useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import React, { useEffect, useRef, useState } from "react";
+import { useNavigate, useParams } from "react-router-dom";
 import {
   ArrowLeft,
   User,
@@ -18,6 +18,7 @@ import {
   Upload,
   FileCheck,
   MapPin,
+  Search,
   X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -32,6 +33,14 @@ import { toast } from "sonner";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { pharmacyApi } from "@/api/pharmacy";
 import LoadingCard from "@/components/LoadingCard";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 const STEPS = [
   { id: 1, title: "Basic information", icon: User },
@@ -73,6 +82,31 @@ function todayIsoDateLocal(): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
+/** Add `days` to a calendar date given as YYYY-MM-DD (local). */
+function addDaysIsoLocal(iso: string, days: number): string {
+  const t = iso.trim();
+  if (!t) return todayIsoDateLocal();
+  const [y, m, d] = t.split("-").map(Number);
+  const dt = new Date(y, m - 1, d);
+  dt.setDate(dt.getDate() + days);
+  return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, "0")}-${String(dt.getDate()).padStart(2, "0")}`;
+}
+
+function normalizeDeviceKey(s: string): string {
+  return s.trim().replace(/\s+/g, " ").toLowerCase();
+}
+
+function deviceRowMatchesSelection(row: { id: string; serialNumber?: string }, selectedId: string): boolean {
+  const sel = selectedId.trim();
+  if (!sel) return false;
+  if (row.id.trim() === sel) return true;
+  const sn = (row.serialNumber ?? "").trim();
+  if (sn && sn === sel) return true;
+  if (normalizeDeviceKey(row.id) === normalizeDeviceKey(sel)) return true;
+  if (sn && normalizeDeviceKey(sn) === normalizeDeviceKey(sel)) return true;
+  return false;
+}
+
 /** Later of two YYYY-MM-DD strings (both optional); prefers defined value. */
 function laterIsoDate(a: string, b: string): string | undefined {
   const at = a?.trim();
@@ -104,18 +138,18 @@ type ScheduledMedicationForm = {
 };
 
 function createEmptyMedication(): ScheduledMedicationForm {
+  const today = todayIsoDateLocal();
   return {
     name: "",
     dosage: "",
     instructions: "",
-    scheduleStart: "",
-    scheduleEnd: "",
+    scheduleStart: today,
+    scheduleEnd: today,
     scheduleMode: null,
     defaultTimesTemplate: ["09:00"],
     byDate: {},
   };
 }
-
 /** Apply normalized template to every day in range (for same-schedule UX). */
 function byDateFromTemplateAcrossRange(
   m: ScheduledMedicationForm,
@@ -179,6 +213,46 @@ function toPatientMedication(m: ScheduledMedicationForm): PatientMedication {
   };
 }
 
+/** Hydrate the add-patient medication form from an API/mock medication line (first schedule wins). */
+function patientMedicationToForm(pm: PatientMedication | undefined | null): ScheduledMedicationForm {
+  const empty = createEmptyMedication();
+  if (!pm?.schedule?.startDate?.trim() || !pm.schedule.endDate?.trim()) {
+    return { ...empty, name: pm?.name?.trim() ?? "", dosage: pm?.dosage?.trim() ?? "", instructions: pm?.instructions?.trim() ?? "" };
+  }
+  const start = pm.schedule.startDate.trim();
+  const end = pm.schedule.endDate.trim();
+  if (!datesValid(start, end)) return empty;
+  const rawBy = pm.schedule.byDate && typeof pm.schedule.byDate === "object" ? { ...pm.schedule.byDate } : {};
+  const days = datesInRange(start, end);
+  const byDate: Record<string, string[]> = {};
+  for (const d of days) {
+    byDate[d] = normalizeTimes(rawBy[d] ?? []);
+  }
+  const firstDayTimes = days.length ? byDate[days[0]] ?? [] : [];
+  let tmpl = firstDayTimes.length ? [...firstDayTimes] : ["09:00"];
+  const allEmpty = days.length > 0 && days.every((d) => (byDate[d]?.length ?? 0) === 0);
+  if (allEmpty) {
+    const fill = tmpl.length ? tmpl : ["09:00"];
+    for (const d of days) {
+      byDate[d] = [...fill];
+    }
+    tmpl = [...fill];
+  }
+  const allSame =
+    days.length > 0 &&
+    days.every((d) => timesSignature(byDate[d] ?? []) === timesSignature(tmpl));
+  return {
+    name: pm.name?.trim() ?? "",
+    dosage: pm.dosage?.trim() ?? "",
+    instructions: pm.instructions?.trim() ?? "",
+    scheduleStart: start,
+    scheduleEnd: end,
+    scheduleMode: days.length ? (allSame ? "same" : "custom") : null,
+    defaultTimesTemplate: tmpl.length ? tmpl : ["09:00"],
+    byDate,
+  };
+}
+
 function formatDateLong(iso: string): string {
   const d = new Date(iso + "T12:00:00");
   return d.toLocaleDateString(undefined, {
@@ -238,12 +312,15 @@ function SingleMedicationScheduleFields({
   addDateTime,
   setDateTimeAt,
   removeDateTime,
-}: ScheduleHandlers) {
+  relaxScheduleDateLimits = false,
+}: ScheduleHandlers & { relaxScheduleDateLimits?: boolean }) {
   const todayMin = todayIsoDateLocal();
   const rangeOk = datesValid(med.scheduleStart, med.scheduleEnd);
   const days = rangeOk ? datesInRange(med.scheduleStart, med.scheduleEnd) : [];
   const tmplSig = timesSignature(med.defaultTimesTemplate);
-  const endDateMin = laterIsoDate(med.scheduleStart, todayMin) ?? todayMin;
+  const endDateMin = relaxScheduleDateLimits
+    ? med.scheduleStart.trim() || undefined
+    : laterIsoDate(med.scheduleStart, todayMin) ?? todayMin;
 
   return (
     <div className="overflow-hidden rounded-2xl border border-border/70 bg-card shadow-elevated">
@@ -302,7 +379,7 @@ function SingleMedicationScheduleFields({
                 id="sched-start-med"
                 className="pr-9 min-w-0 border-border/80 bg-background shadow-sm"
                 value={med.scheduleStart}
-                min={todayMin}
+                min={relaxScheduleDateLimits ? undefined : todayMin}
                 onChange={(e) => setScheduleBoundary("scheduleStart", e.target.value)}
               />
             </div>
@@ -529,9 +606,16 @@ function SingleMedicationScheduleFields({
 
 const AddPatient: React.FC = () => {
   const navigate = useNavigate();
+  const { id: editPatientId } = useParams<{ id: string }>();
+  const isEditMode = typeof editPatientId === "string" && editPatientId.length > 0;
   const { addPatient, patients: addedPatients } = usePatients();
   const queryClient = useQueryClient();
   const [step, setStep] = useState(1);
+  const hydratedRef = useRef(false);
+
+  useEffect(() => {
+    hydratedRef.current = false;
+  }, [editPatientId]);
 
   const [fullName, setFullName] = useState("");
   const [phone, setPhone] = useState("");
@@ -546,6 +630,26 @@ const AddPatient: React.FC = () => {
   const prescriptionFileInputRef = useRef<HTMLInputElement>(null);
   const [assignedDeviceId, setAssignedDeviceId] = useState<string>("");
   const [assignedDeviceSerial, setAssignedDeviceSerial] = useState<string>("");
+  const [assignedDeviceValidUntil, setAssignedDeviceValidUntil] = useState<string>("");
+  const [deviceAssignSearch, setDeviceAssignSearch] = useState("");
+  const [validityDialogOpen, setValidityDialogOpen] = useState(false);
+  const [pendingAssignDeviceId, setPendingAssignDeviceId] = useState<string>("");
+  const [validityDialogDate, setValidityDialogDate] = useState<string>("");
+
+  const {
+    data: patientResp,
+    isLoading: patientLoading,
+    isError: patientError,
+  } = useQuery({
+    queryKey: ["pharmacy", "patients", editPatientId],
+    enabled: isEditMode && !!editPatientId,
+    queryFn: async () => {
+      if (!editPatientId) return null;
+      const resp = await pharmacyApi.getPatient(editPatientId);
+      return resp?.item ?? null;
+    },
+    staleTime: 30_000,
+  });
 
   const { data: unassignedResp, isLoading: unassignedLoading } = useQuery({
     queryKey: ["pharmacy", "devices", "unassigned"],
@@ -563,19 +667,68 @@ const AddPatient: React.FC = () => {
     const s = new Set<string>();
     const items = (patientsListForDevices?.items ?? []) as Record<string, unknown>[];
     for (const p of items) {
+      const rowPatientId = String(p.patientId ?? p.id ?? "").trim();
+      if (isEditMode && editPatientId && rowPatientId === editPatientId) continue;
       const aid = p.assignedDeviceId;
       if (typeof aid === "string" && aid.trim()) s.add(aid.trim());
     }
     for (const p of addedPatients) {
+      if (isEditMode && editPatientId && p.id === editPatientId) continue;
       if (p.assignedDeviceId?.trim()) s.add(p.assignedDeviceId.trim());
     }
     return s;
-  }, [patientsListForDevices?.items, addedPatients]);
+  }, [patientsListForDevices?.items, addedPatients, isEditMode, editPatientId]);
 
   const unassignedDevices = React.useMemo(() => {
     const raw = (unassignedResp?.items ?? []) as Array<{ id: string; serialNumber: string }>;
     return raw.filter((d) => !deviceIdsAlreadyLinked.has(d.id.trim()));
   }, [unassignedResp?.items, deviceIdsAlreadyLinked]);
+
+  /** Full assignable list: unassigned rows plus this patient's current device (not in unassigned API). */
+  const devicesForAssignStepBase = React.useMemo(() => {
+    const base = [...unassignedDevices];
+    if (isEditMode && patientResp) {
+      const p = patientResp as Record<string, unknown>;
+      const curId = String(p.assignedDeviceId ?? "").trim();
+      if (curId) {
+        const inList = base.some((d) => deviceRowMatchesSelection(d, curId));
+        if (!inList) {
+          const curSn = String(p.assignedDeviceSerial ?? "").trim();
+          const label = curSn && normalizeDeviceKey(curSn) !== normalizeDeviceKey(curId) ? curSn : curId;
+          base.unshift({ id: curId, serialNumber: label });
+        }
+      }
+    }
+    const seen = new Set<string>();
+    const deduped: Array<{ id: string; serialNumber: string }> = [];
+    for (const d of base) {
+      const k = d.id.trim();
+      if (seen.has(k)) continue;
+      seen.add(k);
+      deduped.push(d);
+    }
+    return deduped;
+  }, [isEditMode, patientResp, unassignedDevices]);
+
+  const devicesForAssignStep = React.useMemo(() => {
+    const q = deviceAssignSearch.trim().toLowerCase();
+    let rows = devicesForAssignStepBase;
+    if (q) {
+      rows = rows.filter((d) => {
+        const idl = d.id.toLowerCase();
+        const sn = (d.serialNumber ?? "").toLowerCase();
+        return idl.includes(q) || sn.includes(q);
+      });
+    }
+    const sel = assignedDeviceId;
+    return [...rows].sort((a, b) => {
+      const ma = deviceRowMatchesSelection(a, sel);
+      const mb = deviceRowMatchesSelection(b, sel);
+      if (ma && !mb) return -1;
+      if (!ma && mb) return 1;
+      return 0;
+    });
+  }, [devicesForAssignStepBase, deviceAssignSearch, assignedDeviceId]);
   const [submitting, setSubmitting] = useState(false);
 
   const updateMedication = (patch: Partial<ScheduledMedicationForm>) => {
@@ -600,11 +753,13 @@ const AddPatient: React.FC = () => {
       const todayMin = todayIsoDateLocal();
       let scheduleStart = field === "scheduleStart" ? value : m.scheduleStart;
       let scheduleEnd = field === "scheduleEnd" ? value : m.scheduleEnd;
-      if (scheduleStart.trim() && scheduleStart < todayMin) {
-        scheduleStart = todayMin;
-      }
-      if (scheduleEnd.trim() && scheduleEnd < todayMin) {
-        scheduleEnd = todayMin;
+      if (!isEditMode) {
+        if (scheduleStart.trim() && scheduleStart < todayMin) {
+          scheduleStart = todayMin;
+        }
+        if (scheduleEnd.trim() && scheduleEnd < todayMin) {
+          scheduleEnd = todayMin;
+        }
       }
       if (scheduleStart.trim() && scheduleEnd.trim() && scheduleStart > scheduleEnd) {
         scheduleEnd = scheduleStart;
@@ -704,19 +859,111 @@ const AddPatient: React.FC = () => {
   const canProceedStep1 = fullName.trim() && phone.trim();
   const canProceedStep2 = !!medication.name.trim() && scheduleComplete(medication);
   const canProceedStep3 = true;
-  const canProceedStep4 = !!assignedDeviceId;
+  const canProceedStep4 = !!assignedDeviceId.trim() && !!assignedDeviceValidUntil.trim();
 
-  const handleAssignDevice = (deviceRowId: string) => {
-    const dev = unassignedDevices.find((d) => d.id === deviceRowId);
-    setAssignedDeviceId(deviceRowId);
-    const sn = dev?.serialNumber?.trim();
-    setAssignedDeviceSerial(sn && sn !== deviceRowId.trim() ? sn : "");
+  const openDeviceValidityDialog = (deviceRowId: string) => {
+    const dev = devicesForAssignStepBase.find((d) => d.id === deviceRowId);
+    if (!dev) return;
+    setPendingAssignDeviceId(deviceRowId);
+    const sameAsCurrent = deviceRowMatchesSelection(dev, assignedDeviceId);
+    const initialDate =
+      sameAsCurrent && assignedDeviceValidUntil.trim()
+        ? assignedDeviceValidUntil.trim()
+        : addDaysIsoLocal(todayIsoDateLocal(), 365);
+    setValidityDialogDate(initialDate);
+    setValidityDialogOpen(true);
   };
+
+  const confirmDeviceValidity = () => {
+    const v = validityDialogDate.trim();
+    if (!v) {
+      toast.error("Choose a validity date.");
+      return;
+    }
+    if (v < todayIsoDateLocal()) {
+      toast.error("Validity date cannot be in the past.");
+      return;
+    }
+    const dev = devicesForAssignStepBase.find((d) => d.id === pendingAssignDeviceId);
+    if (!dev) {
+      setValidityDialogOpen(false);
+      return;
+    }
+    setAssignedDeviceId(dev.id.trim());
+    const sn = dev.serialNumber?.trim();
+    setAssignedDeviceSerial(sn && sn !== dev.id.trim() ? sn : "");
+    setAssignedDeviceValidUntil(v);
+    setValidityDialogOpen(false);
+    setPendingAssignDeviceId("");
+  };
+
+  useEffect(() => {
+    if (!isEditMode || !patientResp || hydratedRef.current) return;
+    hydratedRef.current = true;
+    const p = patientResp as Record<string, unknown>;
+    setFullName(String(p.fullName ?? ""));
+    setPhone(String(p.phone ?? ""));
+    setEmail(String(p.email ?? ""));
+    setDateOfBirth(String(p.dateOfBirth ?? ""));
+    setAddress(String(p.address ?? ""));
+    setPrescriptionNotes(String(p.prescriptionNotes ?? ""));
+    setPrescriptionFileName(
+      typeof p.prescriptionFileName === "string" ? p.prescriptionFileName : ""
+    );
+    const meds = Array.isArray(p.medications) ? p.medications : [];
+    setMedication(patientMedicationToForm(meds[0] as PatientMedication));
+    const aid = String(p.assignedDeviceId ?? "").trim();
+    setAssignedDeviceId(aid);
+    const sn = String(p.assignedDeviceSerial ?? "").trim();
+    setAssignedDeviceSerial(sn && sn !== aid ? sn : "");
+    const rawUntil =
+      typeof p.assignedDeviceValidUntil === "string" ? p.assignedDeviceValidUntil.trim() : "";
+    if (rawUntil) setAssignedDeviceValidUntil(rawUntil);
+    else if (aid) setAssignedDeviceValidUntil(addDaysIsoLocal(todayIsoDateLocal(), 365));
+    else setAssignedDeviceValidUntil("");
+  }, [isEditMode, patientResp]);
 
   const handleSubmit = async () => {
     setSubmitting(true);
     const validMeds = [toPatientMedication(medication)];
     try {
+      if (isEditMode && editPatientId) {
+        const pExisting = patientResp as Record<string, unknown> | null | undefined;
+        const prevDeviceId = String(pExisting?.assignedDeviceId ?? "").trim();
+        const nextDeviceId = assignedDeviceId.trim();
+
+        await pharmacyApi.updatePatient(editPatientId, {
+          fullName: fullName.trim(),
+          phone: phone.trim(),
+          email: email.trim() || undefined,
+          dateOfBirth: dateOfBirth.trim() || undefined,
+          address: address.trim() || undefined,
+          medications: validMeds,
+          prescriptionNotes: prescriptionNotes.trim() || undefined,
+          prescriptionFileName: prescriptionFileName.trim() || undefined,
+          assignedDeviceValidUntil: assignedDeviceValidUntil.trim() || undefined,
+        });
+
+        if (prevDeviceId && nextDeviceId && prevDeviceId !== nextDeviceId) {
+          await pharmacyApi.unassignDevice(prevDeviceId);
+        }
+        if (nextDeviceId && nextDeviceId !== prevDeviceId) {
+          await pharmacyApi.assignDeviceToPatient(nextDeviceId, {
+            patientId: editPatientId,
+            patientName: fullName.trim(),
+          });
+        }
+
+        toast.success("Patient updated");
+        await queryClient.invalidateQueries({ queryKey: ["pharmacy", "patients"] });
+        await queryClient.invalidateQueries({ queryKey: ["pharmacy", "patients", editPatientId] });
+        await queryClient.invalidateQueries({ queryKey: ["pharmacy", "devices"] });
+        await queryClient.invalidateQueries({ queryKey: ["pharmacy", "devices", "unassigned"] });
+        await queryClient.invalidateQueries({ queryKey: ["pharmacy", "dashboard"] });
+        navigate(`/patients/${encodeURIComponent(editPatientId)}`);
+        return;
+      }
+
       const body = {
         fullName: fullName.trim(),
         phone: phone.trim(),
@@ -728,6 +975,7 @@ const AddPatient: React.FC = () => {
         prescriptionFileName: prescriptionFileName || undefined,
         assignedDeviceId: assignedDeviceId || undefined,
         assignedDeviceSerial: assignedDeviceSerial || undefined,
+        assignedDeviceValidUntil: assignedDeviceValidUntil.trim() || undefined,
       };
 
       const resp = await pharmacyApi.createPatient(body);
@@ -745,6 +993,8 @@ const AddPatient: React.FC = () => {
         prescriptionFileName: created.prescriptionFileName ?? body.prescriptionFileName ?? undefined,
         assignedDeviceId: created.assignedDeviceId ?? assignedDeviceId ?? null,
         assignedDeviceSerial: created.assignedDeviceSerial ?? assignedDeviceSerial ?? undefined,
+        assignedDeviceValidUntil:
+          created.assignedDeviceValidUntil ?? body.assignedDeviceValidUntil ?? undefined,
         createdAt: created.createdAt ?? new Date().toISOString(),
       };
 
@@ -770,11 +1020,27 @@ const AddPatient: React.FC = () => {
       queryClient.invalidateQueries({ queryKey: ["pharmacy", "dashboard"] });
       navigate("/patients");
     } catch (e: any) {
-      toast.error(e?.message ?? "Failed to add patient");
+      toast.error(e?.message ?? (isEditMode ? "Failed to update patient" : "Failed to add patient"));
     } finally {
       setSubmitting(false);
     }
   };
+
+  if (isEditMode) {
+    if (patientLoading) {
+      return <LoadingCard message="Loading patient…" />;
+    }
+    if (patientError || !patientResp) {
+      return (
+        <div className="flex flex-col items-center justify-center py-20">
+          <p className="text-muted-foreground mb-4">Could not load this patient.</p>
+          <Button variant="outline" onClick={() => navigate("/patients")}>
+            Back to Patients
+          </Button>
+        </div>
+      );
+    }
+  }
 
   return (
     <div className="space-y-6 animate-slide-in">
@@ -783,14 +1049,16 @@ const AddPatient: React.FC = () => {
           <ArrowLeft className="h-5 w-5" />
         </Button>
         <div>
-          <h1 className="text-2xl font-bold text-foreground">Add patient</h1>
+          <h1 className="text-2xl font-bold text-foreground">{isEditMode ? "Edit patient" : "Add patient"}</h1>
           <p className="text-sm text-muted-foreground mt-1">
-            Enter basic information, medication schedule, prescription, and assign a device
+            {isEditMode
+              ? "Update information, medication schedule, prescription, and device assignment"
+              : "Enter basic information, medication schedule, prescription, and assign a device"}
           </p>
         </div>
       </div>
 
-      <div className="flex flex-wrap gap-2" role="list" aria-label="Add patient steps (use Next to move forward)">
+      <div className="flex flex-wrap gap-2" role="list" aria-label="Patient steps (use Next to move forward)">
         {STEPS.map((s) => {
           const Icon = s.icon;
           const active = step === s.id;
@@ -941,6 +1209,7 @@ const AddPatient: React.FC = () => {
                 addDateTime={addDateTime}
                 setDateTimeAt={setDateTimeAt}
                 removeDateTime={removeDateTime}
+                relaxScheduleDateLimits={isEditMode}
               />
             )}
 
@@ -1094,11 +1363,13 @@ const AddPatient: React.FC = () => {
               <div className="space-y-4 rounded-xl border-2 border-primary/25 bg-gradient-to-br from-primary/[0.06] via-card to-card p-4 shadow-md sm:p-5">
                 <IconHeading icon={Monitor} title="Device assignment" />
                 <p className="text-sm text-muted-foreground">
-                  Select a device from inventory for this patient. It will be linked when you finish this step.
+                  {isEditMode
+                    ? "Keep the current device or choose another from inventory. The selection is saved when you finish."
+                    : "Select a device from inventory for this patient. It will be linked when you finish this step."}
                 </p>
                 {unassignedLoading ? (
                   <LoadingCard message="Loading unassigned devices…" />
-                ) : unassignedDevices.length === 0 ? (
+                ) : devicesForAssignStepBase.length === 0 ? (
                   <div className="rounded-xl border-2 border-dashed border-warning/40 bg-warning/5 p-8 text-center shadow-sm">
                     <span className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-warning/15">
                       <Cpu className="h-6 w-6 text-warning" />
@@ -1108,67 +1379,90 @@ const AddPatient: React.FC = () => {
                       Add devices to inventory first, then return to assign one to this patient.
                     </p>
                   </div>
+                ) : devicesForAssignStep.length === 0 ? (
+                  <p className="text-sm text-muted-foreground py-6 text-center">No devices match your search.</p>
                 ) : (
-                  <div className="overflow-hidden rounded-xl border border-primary/20 bg-card/95 shadow-inner">
-                    <table className="w-full">
-                      <thead>
-                        <tr className="border-b border-primary/15 bg-primary/[0.07]">
-                          <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                            Device ID
-                          </th>
-                          <th className="px-4 py-3 text-right text-xs font-medium text-muted-foreground uppercase tracking-wider w-24">
-                            Select
-                          </th>
-                        </tr>
-                    </thead>
-                    <tbody className="divide-y">
-                      {unassignedDevices.map((dev) => {
-                        const selected = assignedDeviceId === dev.id;
-                        return (
-                          <tr
-                            key={dev.id}
-                            role="button"
-                            tabIndex={0}
-                            onClick={() => handleAssignDevice(dev.id)}
-                            onKeyDown={(e) => {
-                              if (e.key === "Enter" || e.key === " ") {
-                                e.preventDefault();
-                                handleAssignDevice(dev.id);
-                              }
-                            }}
-                            className={cn(
-                              "cursor-pointer transition-colors",
-                              selected
-                                ? "bg-primary/12 hover:bg-primary/16 ring-1 ring-inset ring-primary/25"
-                                : "hover:bg-muted/35"
-                            )}
-                          >
-                            <td className="px-4 py-3">
-                              <div className="flex items-center gap-2">
-                                <Monitor
+                  <div className="space-y-3">
+                    <div className="relative">
+                      <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground pointer-events-none" />
+                      <Input
+                        placeholder="Search by device id or serial…"
+                        value={deviceAssignSearch}
+                        onChange={(e) => setDeviceAssignSearch(e.target.value)}
+                        className="pl-9"
+                        aria-label="Search devices"
+                      />
+                    </div>
+                    {assignedDeviceValidUntil.trim() ? (
+                      <p className="text-xs text-muted-foreground">
+                        Assignment valid until{" "}
+                        <span className="font-medium text-foreground">{assignedDeviceValidUntil}</span>
+                      </p>
+                    ) : null}
+                    <div className="overflow-hidden rounded-xl border border-primary/20 bg-card/95 shadow-inner">
+                      <div className="max-h-[min(280px,42vh)] overflow-y-auto overscroll-contain">
+                        <table className="w-full">
+                          <thead className="sticky top-0 z-10 bg-primary/[0.07] shadow-sm">
+                            <tr className="border-b border-primary/15">
+                              <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider bg-primary/[0.07]">
+                                Device ID
+                              </th>
+                              <th className="px-4 py-3 text-right text-xs font-medium text-muted-foreground uppercase tracking-wider w-28 bg-primary/[0.07]">
+                                Select
+                              </th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y">
+                            {devicesForAssignStep.map((dev) => {
+                              const selected = deviceRowMatchesSelection(dev, assignedDeviceId);
+                              const displayLabel = dev.serialNumber?.trim() || dev.id;
+                              return (
+                                <tr
+                                  key={dev.id}
+                                  role="button"
+                                  tabIndex={0}
+                                  onClick={() => openDeviceValidityDialog(dev.id)}
+                                  onKeyDown={(e) => {
+                                    if (e.key === "Enter" || e.key === " ") {
+                                      e.preventDefault();
+                                      openDeviceValidityDialog(dev.id);
+                                    }
+                                  }}
                                   className={cn(
-                                    "h-4 w-4 shrink-0",
-                                    selected ? "text-primary" : "text-muted-foreground"
+                                    "cursor-pointer transition-colors",
+                                    selected
+                                      ? "bg-primary/12 hover:bg-primary/16 ring-1 ring-inset ring-primary/25"
+                                      : "hover:bg-muted/35"
                                   )}
-                                />
-                                <span className="text-sm font-medium text-card-foreground">{dev.id}</span>
-                              </div>
-                            </td>
-                            <td className="px-4 py-3 text-right">
-                              {selected ? (
-                                <span className="inline-flex items-center gap-1.5 text-sm font-medium text-primary">
-                                  <CheckCircle2 className="h-4 w-4 shrink-0" />
-                                  Selected
-                                </span>
-                              ) : (
-                                <span className="text-sm text-muted-foreground">—</span>
-                              )}
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
+                                >
+                                  <td className="px-4 py-3">
+                                    <div className="flex items-center gap-2">
+                                      <Monitor
+                                        className={cn(
+                                          "h-4 w-4 shrink-0",
+                                          selected ? "text-primary" : "text-muted-foreground"
+                                        )}
+                                      />
+                                      <span className="text-sm font-medium text-card-foreground">{displayLabel}</span>
+                                    </div>
+                                  </td>
+                                  <td className="px-4 py-3 text-right">
+                                    {selected ? (
+                                      <span className="inline-flex items-center gap-1.5 text-sm font-medium text-primary">
+                                        <CheckCircle2 className="h-4 w-4 shrink-0" />
+                                        Selected
+                                      </span>
+                                    ) : (
+                                      <span className="text-sm text-muted-foreground">—</span>
+                                    )}
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
                   </div>
                 )}
               </div>
@@ -1211,12 +1505,61 @@ const AddPatient: React.FC = () => {
                 onClick={handleSubmit}
                 disabled={!canProceedStep4 || submitting}
               >
-                {submitting ? "Adding patient…" : "Add patient & assign device"}
+                {submitting
+                  ? isEditMode
+                    ? "Saving…"
+                    : "Adding patient…"
+                  : isEditMode
+                    ? "Save changes"
+                    : "Add patient & assign device"}
               </Button>
             )}
           </div>
         </div>
       </div>
+
+      <Dialog
+        open={validityDialogOpen}
+        onOpenChange={(open) => {
+          setValidityDialogOpen(open);
+          if (!open) setPendingAssignDeviceId("");
+        }}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Device assignment validity</DialogTitle>
+            <DialogDescription>
+              Choose the last day this device should remain assigned to this patient. You can change it later by
+              editing the patient.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2 py-2">
+            <Label htmlFor="device-valid-until">Valid until *</Label>
+            <DateInput
+              id="device-valid-until"
+              className="w-full border-border/90 bg-background/80 shadow-sm"
+              value={validityDialogDate}
+              min={todayIsoDateLocal()}
+              onChange={(e) => setValidityDialogDate(e.target.value)}
+            />
+          </div>
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => {
+                setValidityDialogOpen(false);
+                setPendingAssignDeviceId("");
+              }}
+            >
+              Cancel
+            </Button>
+            <Button type="button" onClick={confirmDeviceValidity}>
+              Confirm assignment
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
