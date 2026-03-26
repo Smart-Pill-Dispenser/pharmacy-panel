@@ -7,6 +7,26 @@ export const pharmacyApi = {
     return pharmacyPost<LoginResponse>("pharmacy/login", { email, password }, true);
   },
 
+  async forgotPassword(email: string): Promise<{ message?: string }> {
+    return pharmacyPost<{ message?: string }>(
+      "pharmacy/forgot-password",
+      { email },
+      true
+    );
+  },
+
+  async resetPassword(args: {
+    email: string;
+    code: string;
+    newPassword: string;
+  }): Promise<{ message?: string }> {
+    return pharmacyPost<{ message?: string }>(
+      "pharmacy/reset-password",
+      args,
+      true
+    );
+  },
+
   async refresh(email: string, refreshToken: string): Promise<RefreshResponse> {
     return pharmacyPost<RefreshResponse>("pharmacy/refresh", { email, refreshToken }, true);
   },
@@ -15,9 +35,10 @@ export const pharmacyApi = {
     return pharmacyGet<MeResponse>("pharmacy/me");
   },
 
-  async getDashboard(): Promise<any> {
-    // Backend currently ignores period; keep simple for UI stability.
-    return pharmacyGet<any>("pharmacy/dashboard");
+  async getDashboard(params?: { period?: "weekly" | "monthly" | "yearly" }): Promise<any> {
+    return pharmacyGet<any>("pharmacy/dashboard", {
+      period: params?.period,
+    });
   },
 
   async getDevices(params?: { limit?: number; q?: string; status?: string }): Promise<ListResponse<any>> {
@@ -52,6 +73,10 @@ export const pharmacyApi = {
 
   async assignDeviceToPatient(deviceId: string, args: { patientId: string; patientName?: string }): Promise<any> {
     return pharmacyPost<any>(`pharmacy/devices/${encodeURIComponent(deviceId)}/assign`, args);
+  },
+
+  async unassignDevice(deviceId: string): Promise<any> {
+    return pharmacyPost<any>(`pharmacy/devices/${encodeURIComponent(deviceId)}/unassign`, {});
   },
 
   async stopDispensing(deviceId: string): Promise<any> {

@@ -1,82 +1,274 @@
-import React, { useState, useCallback, useMemo, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
-import { Monitor, Search, Filter, X } from "lucide-react";
-import StatusBadge from "@/components/StatusBadge";
-import type { Device } from "@/data/mockData";
-import { useQuery } from "@tanstack/react-query";
-import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
+import { Filter, Monitor, Search, UserPlus, UserMinus, X } from "lucide-react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { pharmacyApi } from "@/api/pharmacy";
 import LoadingCard from "@/components/LoadingCard";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { toast } from "sonner";
+import { usePatients } from "@/contexts/PatientsContext";
+
+type DeviceRow = {
+  id: string;
+  patientId: string | null;
+  patientLabel: string | null;
+};
+
+function patientInfoFromDevice(d: Record<string, unknown>): { patientId: string | null; patientLabel: string | null } {
+  const pid = d.patientId ?? (d.patient as { id?: string } | undefined)?.id;
+  const patientIdStr = pid != null && String(pid).trim() !== "" ? String(pid) : null;
+  if (!patientIdStr) return { patientId: null, patientLabel: null };
+  const name = (d.patientName ?? d.name) as string | undefined;
+  const t = typeof name === "string" ? name.trim() : "";
+  const label = t && t !== "—" ? t : "Patient";
+  return { patientId: patientIdStr, patientLabel: label };
+}
+
+function mergePatientFromAssignments(
+  deviceId: string,
+  fromDevice: { patientId: string | null; patientLabel: string | null },
+  patientByDeviceId: Map<string, { patientId: string; patientLabel: string }>
+): { patientId: string | null; patientLabel: string | null } {
+  let { patientId, patientLabel } = fromDevice;
+  if (!patientId) {
+    const alt = patientByDeviceId.get(deviceId.trim());
+    if (alt) {
+      patientId = alt.patientId;
+      patientLabel = alt.patientLabel;
+    }
+  }
+  return { patientId, patientLabel };
+}
 
 const PAGE_SIZE_OPTIONS = [5, 10, 25, 50];
 
+const NONE_PATIENT = "__none__";
+
 const Devices: React.FC = () => {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
+  const { patients: addedPatients } = usePatients();
   const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [assignmentFilter, setAssignmentFilter] = useState<string>("all");
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
+  const [assignDeviceId, setAssignDeviceId] = useState<string | null>(null);
+  const [assignPatientId, setAssignPatientId] = useState<string>(NONE_PATIENT);
+  const [unassignTarget, setUnassignTarget] = useState<{ deviceId: string; patientLabel: string } | null>(null);
 
-  const { data, isLoading, isError } = useQuery({
-    queryKey: ["pharmacy", "devices"],
-    queryFn: () => pharmacyApi.getDevices(),
+  const { data: patientsListData } = useQuery({
+    queryKey: ["pharmacy", "patients"],
+    queryFn: () => pharmacyApi.listPatients({ limit: 5000 }),
     staleTime: 30_000,
   });
 
-  const devices = (data?.items ?? []) as Device[];
+  const patientsForAssign = useMemo(() => {
+    const items = (patientsListData?.items ?? []) as Record<string, unknown>[];
+    const apiPatients = items
+      .map((p) => ({
+        id: String(p.patientId ?? p.id ?? ""),
+        name: String(p.fullName ?? ""),
+        deviceId: typeof p.assignedDeviceId === "string" ? p.assignedDeviceId : undefined,
+      }))
+      .filter((p) => p.id && p.name);
+    const apiIds = new Set(apiPatients.map((p) => p.id));
+    const fromAdded = addedPatients
+      .filter((p) => !apiIds.has(p.id))
+      .map((p) => ({
+        id: p.id,
+        name: p.fullName,
+        deviceId: p.assignedDeviceId ?? undefined,
+      }));
+    return [...apiPatients, ...fromAdded];
+  }, [patientsListData, addedPatients]);
 
-  const filtered = useMemo(
-    () =>
-      devices.filter((d) => {
-        const q = search.trim().toLowerCase();
-        if (q && !d.patientName.toLowerCase().includes(q) && !d.id.toLowerCase().includes(q) && !d.serialNumber.toLowerCase().includes(q)) return false;
-        if (statusFilter !== "all" && d.status !== statusFilter) return false;
-        return true;
-      }),
-    [devices, search, statusFilter]
+  /** Prefer patients without a device so assignment is unambiguous. */
+  const assignablePatients = useMemo(
+    () => patientsForAssign.filter((p) => !p.deviceId),
+    [patientsForAssign]
   );
+
+  const assignMutation = useMutation({
+    mutationFn: async ({ deviceId, patientId, patientName }: { deviceId: string; patientId: string; patientName: string }) =>
+      pharmacyApi.assignDeviceToPatient(deviceId, { patientId, patientName }),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["pharmacy", "devices"] });
+      await queryClient.invalidateQueries({ queryKey: ["pharmacy", "devices", "unassigned"] });
+      await queryClient.invalidateQueries({ queryKey: ["pharmacy", "patients"] });
+      await queryClient.invalidateQueries({ queryKey: ["pharmacy", "dashboard"] });
+      toast.success("Device assigned to patient");
+      setAssignDeviceId(null);
+      setAssignPatientId(NONE_PATIENT);
+    },
+    onError: (e: Error) => {
+      toast.error(e?.message ?? "Failed to assign device");
+    },
+  });
+
+  const unassignMutation = useMutation({
+    mutationFn: (deviceId: string) => pharmacyApi.unassignDevice(deviceId),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["pharmacy", "devices"] });
+      await queryClient.invalidateQueries({ queryKey: ["pharmacy", "devices", "unassigned"] });
+      await queryClient.invalidateQueries({ queryKey: ["pharmacy", "patients"] });
+      await queryClient.invalidateQueries({ queryKey: ["pharmacy", "dashboard"] });
+      toast.success("Device unassigned from patient");
+      setUnassignTarget(null);
+    },
+    onError: (e: Error) => {
+      toast.error(e?.message ?? "Failed to unassign device");
+    },
+  });
+
+  const { data: devicesData, isLoading: loadingOrg, isError: errOrg } = useQuery({
+    queryKey: ["pharmacy", "devices"],
+    queryFn: () => pharmacyApi.getDevices(),
+    staleTime: 0,
+  });
+
+  const { data: unassignedData, isLoading: loadingUnassigned, isError: errUnassigned } = useQuery({
+    queryKey: ["pharmacy", "devices", "unassigned"],
+    queryFn: () => pharmacyApi.getUnassignedDevices(),
+    staleTime: 0,
+  });
+
+  const isLoading = loadingOrg || loadingUnassigned;
+  const isError = errOrg || errUnassigned;
+
+  /** If patient has `assignedDeviceId` but device row lacked `patientId` (legacy rows), still treat as assigned. */
+  const patientByDeviceId = useMemo(() => {
+    const m = new Map<string, { patientId: string; patientLabel: string }>();
+    for (const p of patientsForAssign) {
+      const did = p.deviceId?.trim();
+      if (did) {
+        m.set(did, { patientId: p.id, patientLabel: p.name });
+      }
+    }
+    return m;
+  }, [patientsForAssign]);
+
+  const rows: DeviceRow[] = useMemo(() => {
+    const orgItems = (devicesData?.items ?? []) as Record<string, unknown>[];
+    const globalSlim = (unassignedData as { globalPool?: { id: string; serialNumber?: string }[] })?.globalPool ?? [];
+
+    const fromOrg: DeviceRow[] = orgItems.map((d) => {
+      const did = String(d.id ?? "");
+      const merged = mergePatientFromAssignments(did, patientInfoFromDevice(d), patientByDeviceId);
+      return {
+        id: did,
+        patientId: merged.patientId,
+        patientLabel: merged.patientLabel,
+      };
+    });
+
+    const seen = new Set(fromOrg.map((r) => r.id));
+    const fromGlobal: DeviceRow[] = globalSlim
+      .filter((d) => d.id && !seen.has(d.id))
+      .map((d) => {
+        const merged = mergePatientFromAssignments(
+          d.id,
+          { patientId: null, patientLabel: null },
+          patientByDeviceId
+        );
+        return {
+          id: d.id,
+          patientId: merged.patientId,
+          patientLabel: merged.patientLabel,
+        };
+      });
+
+    return [...fromOrg, ...fromGlobal];
+  }, [devicesData, unassignedData, patientByDeviceId]);
+
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return rows.filter((row) => {
+      const matchesSearch =
+        !q ||
+        row.id.toLowerCase().includes(q) ||
+        (row.patientLabel?.toLowerCase().includes(q) ?? false);
+      if (!matchesSearch) return false;
+      if (assignmentFilter !== "all") {
+        const hasPatient = row.patientId != null;
+        const matchesAssignment =
+          assignmentFilter === "unassigned" ? !hasPatient : hasPatient;
+        if (!matchesAssignment) return false;
+      }
+      return true;
+    });
+  }, [rows, search, assignmentFilter]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
   const safePage = Math.min(Math.max(1, page), totalPages);
+
   useEffect(() => {
     if (page > totalPages && totalPages >= 1) setPage(totalPages);
   }, [page, totalPages]);
+
   const paginated = useMemo(
     () => filtered.slice((safePage - 1) * pageSize, safePage * pageSize),
     [filtered, safePage, pageSize]
   );
+
   const startItem = filtered.length === 0 ? 0 : (safePage - 1) * pageSize + 1;
   const endItem = Math.min(safePage * pageSize, filtered.length);
 
-  const hasActiveFilters = search.trim().length > 0 || statusFilter !== "all";
+  const hasActiveFilters = search.trim().length > 0 || assignmentFilter !== "all";
+  const isEmpty = rows.length === 0;
+  const hasNoResults = filtered.length === 0 && hasActiveFilters;
+
   const clearFilters = useCallback(() => {
     setSearch("");
-    setStatusFilter("all");
+    setAssignmentFilter("all");
     setPage(1);
   }, []);
-  const isEmpty = devices.length === 0;
-  const hasNoResults = filtered.length === 0 && hasActiveFilters;
 
   return (
     <div className="space-y-6 animate-slide-in">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-foreground">Devices</h1>
-          <p className="text-sm text-muted-foreground mt-1">Manage registered hardware devices</p>
-        </div>
+      <div>
+        <h1 className="text-2xl font-bold text-foreground">Devices</h1>
+        <p className="text-sm text-muted-foreground mt-1">
+          Devices not assigned to a patient, and devices assigned to patients by your pharmacy
+        </p>
       </div>
 
-      {/* Search and filters toolbar - same as admin, no upload buttons */}
+      {/* Search and filters toolbar — same pattern as Caregivers */}
       <div className="rounded-xl border bg-card p-4 shadow-card">
         <div className="flex flex-wrap items-center gap-3">
           <div className="relative flex-1 min-w-[200px] max-w-sm">
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground pointer-events-none" />
             <Input
-              placeholder="Search devices..."
+              placeholder="Search by device ID or patient..."
               value={search}
-              onChange={(e) => { setSearch(e.target.value); setPage(1); }}
+              onChange={(e) => {
+                setSearch(e.target.value);
+                setPage(1);
+              }}
               className="pl-9 pr-9"
               aria-label="Search devices"
             />
@@ -86,7 +278,10 @@ const Devices: React.FC = () => {
                 variant="ghost"
                 size="icon"
                 className="absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7 text-muted-foreground hover:text-foreground"
-                onClick={() => { setSearch(""); setPage(1); }}
+                onClick={() => {
+                  setSearch("");
+                  setPage(1);
+                }}
                 aria-label="Clear search"
               >
                 <X className="h-4 w-4" />
@@ -95,17 +290,21 @@ const Devices: React.FC = () => {
           </div>
           <div className="flex items-center gap-2">
             <Filter className="h-4 w-4 text-muted-foreground shrink-0" />
-            <span className="text-sm text-muted-foreground whitespace-nowrap">Status:</span>
-            <Select value={statusFilter} onValueChange={(v) => { setStatusFilter(v); setPage(1); }}>
-              <SelectTrigger className="w-[130px]">
-                <SelectValue placeholder="Status" />
+            <span className="text-sm text-muted-foreground whitespace-nowrap">Assignment:</span>
+            <Select
+              value={assignmentFilter}
+              onValueChange={(v) => {
+                setAssignmentFilter(v);
+                setPage(1);
+              }}
+            >
+              <SelectTrigger className="w-[160px]">
+                <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">All status</SelectItem>
-                <SelectItem value="online">Online</SelectItem>
-                <SelectItem value="offline">Offline</SelectItem>
-                <SelectItem value="error">Error</SelectItem>
-                <SelectItem value="stopped">Stopped</SelectItem>
+                <SelectItem value="all">All</SelectItem>
+                <SelectItem value="unassigned">Unassigned</SelectItem>
+                <SelectItem value="assigned">Assigned</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -131,10 +330,9 @@ const Devices: React.FC = () => {
       )}
 
       {!isLoading && !isError && isEmpty && (
-        <div className="rounded-xl border border-dashed bg-card p-12 text-center">
-          <Monitor className="mx-auto h-12 w-12 text-muted-foreground" />
-          <h2 className="mt-4 text-lg font-semibold text-foreground">No devices yet</h2>
-          <p className="mt-2 text-sm text-muted-foreground max-w-sm mx-auto">Registered devices will appear here.</p>
+        <div className="rounded-xl border border-dashed bg-card p-8 text-center">
+          <Monitor className="mx-auto h-10 w-10 text-muted-foreground" />
+          <p className="mt-3 text-sm text-muted-foreground">No devices to show.</p>
         </div>
       )}
 
@@ -142,71 +340,209 @@ const Devices: React.FC = () => {
         <div className="rounded-xl border bg-card p-12 text-center">
           <Search className="mx-auto h-12 w-12 text-muted-foreground" />
           <h2 className="mt-4 text-lg font-semibold text-foreground">No matching devices</h2>
-          <p className="mt-2 text-sm text-muted-foreground">Try a different search or clear filters.</p>
+          <p className="mt-2 text-sm text-muted-foreground">
+            No devices match your filters{search.trim() ? ` for "${search.trim()}"` : ""}.
+          </p>
           <Button variant="outline" className="mt-4" onClick={clearFilters}>
             Clear filters
           </Button>
         </div>
       )}
 
+      <Dialog
+        open={assignDeviceId != null}
+        onOpenChange={(open) => {
+          if (!open) {
+            setAssignDeviceId(null);
+            setAssignPatientId(NONE_PATIENT);
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-md" onClick={(e) => e.stopPropagation()}>
+          <DialogHeader>
+            <DialogTitle>Assign device to patient</DialogTitle>
+            <DialogDescription>
+              Each device can have only one patient and each patient only one device. Only patients without a device are listed.
+            </DialogDescription>
+          </DialogHeader>
+          {assignablePatients.length === 0 ? (
+            <p className="text-sm text-muted-foreground">
+              No patients without an assigned device. Add a patient or unassign a device first.
+            </p>
+          ) : (
+            <div className="grid gap-2 py-2">
+              <span className="text-sm font-medium text-foreground">Patient</span>
+              <Select value={assignPatientId} onValueChange={setAssignPatientId}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select patient" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={NONE_PATIENT}>Select patient…</SelectItem>
+                  {assignablePatients.map((p) => (
+                    <SelectItem key={p.id} value={p.id}>
+                      {p.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setAssignDeviceId(null);
+                setAssignPatientId(NONE_PATIENT);
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              disabled={
+                assignMutation.isPending ||
+                !assignDeviceId ||
+                assignPatientId === NONE_PATIENT ||
+                assignablePatients.length === 0
+              }
+              onClick={() => {
+                if (!assignDeviceId || assignPatientId === NONE_PATIENT) return;
+                const p = assignablePatients.find((x) => x.id === assignPatientId);
+                if (!p) return;
+                assignMutation.mutate({
+                  deviceId: assignDeviceId,
+                  patientId: p.id,
+                  patientName: p.name,
+                });
+              }}
+            >
+              {assignMutation.isPending ? "Assigning…" : "Assign"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <AlertDialog
+        open={unassignTarget != null}
+        onOpenChange={(open) => {
+          if (!open && !unassignMutation.isPending) setUnassignTarget(null);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Unassign device?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {unassignTarget ? (
+                <>
+                  Remove patient <span className="font-medium text-foreground">{unassignTarget.patientLabel}</span> from
+                  device <span className="font-medium text-foreground">{unassignTarget.deviceId}</span>. The device stays
+                  in your pharmacy and can be assigned again later.
+                </>
+              ) : null}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={unassignMutation.isPending}>Cancel</AlertDialogCancel>
+            <Button
+              variant="destructive"
+              disabled={unassignMutation.isPending || !unassignTarget}
+              onClick={() => {
+                if (unassignTarget) unassignMutation.mutate(unassignTarget.deviceId);
+              }}
+            >
+              {unassignMutation.isPending ? "Unassigning…" : "Unassign"}
+            </Button>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
       {!isLoading && !isError && !isEmpty && !hasNoResults && (
         <div className="rounded-xl border bg-card shadow-card overflow-hidden">
           <table className="w-full">
             <thead>
               <tr className="border-b bg-muted/50">
-                <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Device</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider hidden sm:table-cell">Serial</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Patient</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider hidden md:table-cell">Pouches</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider hidden lg:table-cell">Caregiver</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Status</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                  Device ID
+                </th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                  Patient
+                </th>
               </tr>
             </thead>
             <tbody className="divide-y">
-              {paginated.map((device) => (
+              {paginated.map((row) => (
                 <tr
-                  key={device.id}
+                  key={row.id}
                   className="hover:bg-muted/30 cursor-pointer transition-colors"
-                  onClick={() => navigate(`/devices/${device.id}`)}
+                  onClick={() => navigate(`/devices/${row.id}`)}
                 >
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-2">
                       <Monitor className="h-4 w-4 shrink-0 text-muted-foreground" />
-                      <span className="text-sm font-medium text-card-foreground">{device.id}</span>
+                      <span className="text-sm font-medium text-card-foreground">{row.id}</span>
                     </div>
                   </td>
-                  <td className="px-4 py-3 text-sm text-muted-foreground hidden sm:table-cell">{device.serialNumber}</td>
-                  <td className="px-4 py-3 text-sm text-card-foreground">{device.patientName}</td>
-                  <td className="px-4 py-3 hidden md:table-cell">
-                    <div className="flex items-center gap-2">
-                      <div className="h-2 w-16 rounded-full bg-muted overflow-hidden">
-                        <div
-                          className="h-full rounded-full transition-all"
-                          style={{
-                            width: `${(device.remainingPouches / device.totalPouches) * 100}%`,
-                            backgroundColor: device.remainingPouches <= device.refillThreshold ? "hsl(var(--destructive))" : "hsl(var(--success))",
-                          }}
-                        />
+                  <td className="px-4 py-3 text-sm" onClick={(e) => e.stopPropagation()}>
+                    {row.patientId && row.patientLabel ? (
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Link
+                          to={`/patients/${row.patientId}`}
+                          className="font-medium text-primary hover:underline focus:outline-none focus:underline"
+                        >
+                          {row.patientLabel}
+                        </Link>
+                        <Button
+                          type="button"
+                          variant="destructive"
+                          size="sm"
+                          className="h-8 gap-1.5"
+                          disabled={unassignMutation.isPending}
+                          onClick={() =>
+                            setUnassignTarget({ deviceId: row.id, patientLabel: row.patientLabel ?? "Patient" })
+                          }
+                        >
+                          <UserMinus className="h-4 w-4 shrink-0" aria-hidden />
+                          Unassign
+                        </Button>
                       </div>
-                      <span className="text-xs text-muted-foreground">{device.remainingPouches}/{device.totalPouches}</span>
-                    </div>
+                    ) : (
+                      <Button
+                        type="button"
+                        variant="info"
+                        size="sm"
+                        className="h-8 gap-1.5"
+                        onClick={() => {
+                          setAssignDeviceId(row.id);
+                          setAssignPatientId(NONE_PATIENT);
+                        }}
+                      >
+                        <UserPlus className="h-4 w-4 shrink-0" aria-hidden />
+                        Assign
+                      </Button>
+                    )}
                   </td>
-                  <td className="px-4 py-3 text-sm text-muted-foreground hidden lg:table-cell">{device.assignedCaregiver}</td>
-                  <td className="px-4 py-3"><StatusBadge status={device.status} /></td>
                 </tr>
               ))}
             </tbody>
           </table>
+
           <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 px-4 py-3 border-t bg-muted/30">
             <div className="flex items-center gap-2">
               <span className="text-sm text-muted-foreground whitespace-nowrap">Items per page:</span>
-              <Select value={String(pageSize)} onValueChange={(v) => { setPageSize(Number(v)); setPage(1); }}>
+              <Select
+                value={String(pageSize)}
+                onValueChange={(v) => {
+                  setPageSize(Number(v));
+                  setPage(1);
+                }}
+              >
                 <SelectTrigger className="w-[70px] h-8">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
                   {PAGE_SIZE_OPTIONS.map((size) => (
-                    <SelectItem key={size} value={String(size)}>{size}</SelectItem>
+                    <SelectItem key={size} value={String(size)}>
+                      {size}
+                    </SelectItem>
                   ))}
                 </SelectContent>
               </Select>

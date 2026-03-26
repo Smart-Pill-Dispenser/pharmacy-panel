@@ -51,12 +51,23 @@ export interface RefillNotification {
   urgent: boolean;
 }
 
+/** Calendar date (YYYY-MM-DD) → exact 24h dispense times (HH:mm) for that date only */
+export interface MedicationDispenseSchedule {
+  startDate: string;
+  endDate: string;
+  byDate: Record<string, string[]>;
+  /** @deprecated Older weekly model; PatientDetail may still render this if present */
+  byDay?: Record<string, string[]>;
+}
+
 /** Patient medication line for add-patient flow */
 export interface PatientMedication {
   name: string;
   dosage: string;
-  frequency: string;
+  /** Short summary for lists; optional when `schedule` is set */
+  frequency?: string;
   instructions?: string;
+  schedule?: MedicationDispenseSchedule;
 }
 
 /** Patient as added by pharmacy: basic info, medication, prescription, assigned device */

@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useCallback } from "react";
 import { pharmacyApi } from "@/api/pharmacy";
-import { pharmacyTokenStorage } from "@/api/client";
+import { cognitoUsernameFromIdToken, pharmacyTokenStorage } from "@/api/client";
 
 interface AuthContextType {
   isAuthenticated: boolean;
@@ -30,12 +30,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const login = useCallback(async (email: string, password: string) => {
     const tokens = await pharmacyApi.login(email, password);
-    const accessToken = tokens.idToken ?? tokens.accessToken;
     const refreshToken = tokens.refreshToken;
-    if (!accessToken) throw new Error("Login failed: access token missing");
     if (!refreshToken) throw new Error("Login failed: refresh token missing");
+    // Backend `requirePharmacyPrincipal` reads `custom:pharmacyId` from JWT claims — those live on the ID token, not the access token.
+    const bearer = (tokens.idToken ?? tokens.accessToken)?.trim();
+    if (!bearer) throw new Error("Login failed: token missing");
 
-    pharmacyTokenStorage.setTokens({ email, accessToken, refreshToken });
+    const poolUsername = cognitoUsernameFromIdToken(tokens.idToken);
+    pharmacyTokenStorage.setTokens({
+      email,
+      accessToken: bearer,
+      refreshToken,
+      cognitoUsername: poolUsername,
+    });
 
     setIsAuthenticated(true);
     localStorage.setItem("pharmacy_auth", "true");

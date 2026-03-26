@@ -93,6 +93,9 @@ const CaregiverDetail: React.FC = () => {
           <div>
             <h1 className="text-2xl font-bold text-foreground">{caregiver.name}</h1>
             <p className="text-sm text-muted-foreground">{caregiver.email}</p>
+            <p className="text-xs text-muted-foreground mt-1">
+              Caregiver ID: <span className="font-mono">{caregiver.id}</span>
+            </p>
           </div>
         </div>
         <StatusBadge status={caregiver.status} />

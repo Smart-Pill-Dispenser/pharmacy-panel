@@ -28,7 +28,10 @@ const AppLayout: React.FC = () => {
         )}
       >
         <header className="sticky top-0 z-30 flex h-14 shrink-0 items-center justify-end gap-3 border-b bg-background/95 px-6 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-          <span className="text-sm font-medium text-muted-foreground">Pharmacy Panel</span>
+          <span className="text-sm">
+            <span className="font-semibold text-foreground">Pharmacy</span>
+            <span className="font-medium text-muted-foreground"> Panel</span>
+          </span>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="ghost" size="icon" className="rounded-full" aria-label="Open profile menu">

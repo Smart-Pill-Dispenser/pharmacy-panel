@@ -3,6 +3,7 @@ import { HelpCircle, Search, Filter, Calendar, X } from "lucide-react";
 import StatusBadge from "@/components/StatusBadge";
 import type { HelpRequest } from "@/data/mockData";
 import { Input } from "@/components/ui/input";
+import { DateInput } from "@/components/ui/date-input";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
@@ -187,9 +188,25 @@ const HelpSupport: React.FC = () => {
           </div>
           <div className="flex items-center gap-2">
             <Calendar className="h-4 w-4 text-muted-foreground shrink-0" />
-            <Input type="date" className="min-w-[152px] w-[152px] h-9 pr-9 shrink-0" value={dateFrom} onChange={(e) => { setDateFrom(e.target.value); setPage(1); }} aria-label="From date" />
+            <DateInput
+              className="min-w-[152px] w-[152px] h-9 pr-9 shrink-0"
+              value={dateFrom}
+              onChange={(e) => {
+                setDateFrom(e.target.value);
+                setPage(1);
+              }}
+              aria-label="From date"
+            />
             <span className="text-muted-foreground text-sm shrink-0">–</span>
-            <Input type="date" className="min-w-[152px] w-[152px] h-9 pr-9 shrink-0" value={dateTo} onChange={(e) => { setDateTo(e.target.value); setPage(1); }} aria-label="To date" />
+            <DateInput
+              className="min-w-[152px] w-[152px] h-9 pr-9 shrink-0"
+              value={dateTo}
+              onChange={(e) => {
+                setDateTo(e.target.value);
+                setPage(1);
+              }}
+              aria-label="To date"
+            />
           </div>
           {hasActiveFilters && (
             <Button variant="ghost" size="sm" onClick={clearFilters}>
@@ -206,12 +223,22 @@ const HelpSupport: React.FC = () => {
 
       {isLoading && <LoadingCard message="Loading help requests…" />}
 
+      {!isLoading && isError && (
+        <div className="rounded-xl border bg-card p-12 text-center">
+          <HelpCircle className="mx-auto h-12 w-12 text-destructive" />
+          <h2 className="mt-4 text-lg font-semibold text-foreground">Could not load help requests</h2>
+          <p className="mt-2 text-sm text-muted-foreground max-w-sm mx-auto">
+            There was a problem fetching help requests from the server. Please refresh the page or contact support if this continues.
+          </p>
+        </div>
+      )}
+
       {!isLoading && !isError && isEmpty && (
         <div className="rounded-xl border border-dashed bg-card p-12 text-center">
           <HelpCircle className="mx-auto h-12 w-12 text-muted-foreground" />
           <h2 className="mt-4 text-lg font-semibold text-foreground">No help requests yet</h2>
           <p className="mt-2 text-sm text-muted-foreground max-w-sm mx-auto">
-            Help requests from devices will appear here when submitted.
+            When patients or devices submit a help request it will appear here. You can search, filter by status, or filter by date above.
           </p>
         </div>
       )}

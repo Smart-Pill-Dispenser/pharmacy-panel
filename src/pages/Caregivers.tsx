@@ -209,6 +209,7 @@ const Caregivers: React.FC = () => {
           <Table>
             <TableHeader>
               <TableRow className="border-b bg-muted/50 hover:bg-transparent">
+                <TableHead className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Caregiver ID</TableHead>
                 <TableHead className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Name</TableHead>
                 <TableHead className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Email</TableHead>
                 <TableHead className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider hidden sm:table-cell">Phone</TableHead>
@@ -224,6 +225,9 @@ const Caregivers: React.FC = () => {
                   className="hover:bg-muted/30 border-b-0 cursor-pointer transition-colors"
                   onClick={() => navigate(`/caregivers/${caregiver.id}`, { state: { caregiver } })}
                 >
+                  <TableCell className="px-4 py-3 text-sm text-muted-foreground">
+                    {caregiver.id}
+                  </TableCell>
                   <TableCell className="px-4 py-3">
                     <div className="flex items-center gap-2">
                       <Users className="h-4 w-4 shrink-0 text-muted-foreground" />

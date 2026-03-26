@@ -1,22 +1,49 @@
 import React, { useState, useMemo, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { UserPlus, Users, Search, Monitor, Phone, Mail, X } from "lucide-react";
+import { UserPlus, Users, Search, Monitor, Phone, Mail, X, UserMinus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { usePatients } from "@/contexts/PatientsContext";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { useQuery } from "@tanstack/react-query";
+import {
+  AlertDialog,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { pharmacyApi } from "@/api/pharmacy";
 import LoadingCard from "@/components/LoadingCard";
+import { toast } from "sonner";
 
 const PAGE_SIZE_OPTIONS = [5, 10, 25, 50];
 
 const Patients: React.FC = () => {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const { patients: addedPatients } = usePatients();
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
+  const [unassignTarget, setUnassignTarget] = useState<{ deviceId: string; patientName: string } | null>(null);
+
+  const unassignMutation = useMutation({
+    mutationFn: (deviceId: string) => pharmacyApi.unassignDevice(deviceId),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["pharmacy", "patients"] });
+      await queryClient.invalidateQueries({ queryKey: ["pharmacy", "devices"] });
+      await queryClient.invalidateQueries({ queryKey: ["pharmacy", "devices", "unassigned"] });
+      await queryClient.invalidateQueries({ queryKey: ["pharmacy", "dashboard"] });
+      toast.success("Device unassigned from patient");
+      setUnassignTarget(null);
+    },
+    onError: (e: Error) => {
+      toast.error(e?.message ?? "Failed to unassign device");
+    },
+  });
 
   const { data, isLoading, isError } = useQuery({
     queryKey: ["pharmacy", "patients"],
@@ -152,6 +179,40 @@ const Patients: React.FC = () => {
         </div>
       )}
 
+      <AlertDialog
+        open={unassignTarget != null}
+        onOpenChange={(open) => {
+          if (!open && !unassignMutation.isPending) setUnassignTarget(null);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Unassign device?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {unassignTarget ? (
+                <>
+                  Remove device <span className="font-medium text-foreground">{unassignTarget.deviceId}</span> from{" "}
+                  <span className="font-medium text-foreground">{unassignTarget.patientName}</span>. The device remains
+                  available to assign again from the Devices page.
+                </>
+              ) : null}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={unassignMutation.isPending}>Cancel</AlertDialogCancel>
+            <Button
+              variant="destructive"
+              disabled={unassignMutation.isPending || !unassignTarget}
+              onClick={() => {
+                if (unassignTarget) unassignMutation.mutate(unassignTarget.deviceId);
+              }}
+            >
+              {unassignMutation.isPending ? "Unassigning…" : "Unassign"}
+            </Button>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
       {!isLoading && !isError && !isEmpty && !hasNoResults && (
         <div className="rounded-xl border bg-card shadow-card overflow-hidden">
           <table className="w-full">
@@ -196,13 +257,29 @@ const Patients: React.FC = () => {
                       "—"
                     )}
                   </td>
-                  <td className="px-4 py-3 text-sm text-muted-foreground">
+                  <td className="px-4 py-3 text-sm text-muted-foreground" onClick={(e) => e.stopPropagation()}>
                     {r.deviceId ? (
-                      <span className="flex items-center gap-1.5">
-                        <Monitor className="h-3.5 w-3.5 shrink-0" />
-                        {r.deviceId}
-                        {r.serialNumber && <span className="text-xs">({r.serialNumber})</span>}
-                      </span>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="flex items-center gap-1.5 min-w-0">
+                          <Monitor className="h-3.5 w-3.5 shrink-0" />
+                          <span className="truncate">{r.deviceId}</span>
+                          {r.serialNumber &&
+                            r.serialNumber.trim() !== r.deviceId.trim() && (
+                              <span className="text-xs shrink-0">({r.serialNumber})</span>
+                            )}
+                        </span>
+                        <Button
+                          type="button"
+                          variant="destructive"
+                          size="sm"
+                          className="h-8 gap-1 shrink-0"
+                          disabled={unassignMutation.isPending}
+                          onClick={() => setUnassignTarget({ deviceId: r.deviceId!, patientName: r.name })}
+                        >
+                          <UserMinus className="h-3.5 w-3.5" aria-hidden />
+                          Unassign
+                        </Button>
+                      </div>
                     ) : (
                       "—"
                     )}

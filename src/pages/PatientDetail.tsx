@@ -1,18 +1,46 @@
-import React from "react";
+import React, { useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { ArrowLeft, User, Phone, Mail, Calendar, MapPin, Pill, FileText, Monitor } from "lucide-react";
+import { ArrowLeft, User, Phone, Mail, Calendar, MapPin, Pill, FileText, Monitor, UserMinus } from "lucide-react";
 import type { Patient } from "@/data/mockData";
 import { usePatients } from "@/contexts/PatientsContext";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { pharmacyApi } from "@/api/pharmacy";
 import LoadingCard from "@/components/LoadingCard";
+import {
+  AlertDialog,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { toast } from "sonner";
 
 const PatientDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const { patients: addedPatients } = usePatients();
+  const [unassignOpen, setUnassignOpen] = useState(false);
+
+  const unassignMutation = useMutation({
+    mutationFn: (deviceId: string) => pharmacyApi.unassignDevice(deviceId),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["pharmacy", "patients"] });
+      if (id) await queryClient.invalidateQueries({ queryKey: ["pharmacy", "patients", id] });
+      await queryClient.invalidateQueries({ queryKey: ["pharmacy", "devices"] });
+      await queryClient.invalidateQueries({ queryKey: ["pharmacy", "devices", "unassigned"] });
+      await queryClient.invalidateQueries({ queryKey: ["pharmacy", "dashboard"] });
+      toast.success("Device unassigned from patient");
+      setUnassignOpen(false);
+    },
+    onError: (e: Error) => {
+      toast.error(e?.message ?? "Failed to unassign device");
+    },
+  });
 
   const patientAdded = id ? addedPatients.find((p) => p.id === id) : null;
   const { data: patientResp, isLoading: patientLoading, isError: patientError } = useQuery({
@@ -133,24 +161,74 @@ const PatientDetail: React.FC = () => {
         {patient.assignedDeviceId && (
           <Card className="rounded-xl border bg-card shadow-card">
             <CardHeader className="pb-2">
-              <div className="flex items-center justify-between">
+              <div className="flex flex-wrap items-center justify-between gap-2">
                 <div className="flex items-center gap-2">
                   <Monitor className="h-4 w-4 text-muted-foreground" />
                   <CardTitle className="text-sm font-medium text-muted-foreground">Assigned device</CardTitle>
                 </div>
-                <Button variant="outline" size="sm" onClick={() => navigate(`/devices/${patient.assignedDeviceId}`)}>
-                  View device
-                </Button>
+                <div className="flex flex-wrap items-center gap-2">
+                  <Button variant="outline" size="sm" onClick={() => navigate(`/devices/${patient.assignedDeviceId}`)}>
+                    View device
+                  </Button>
+                  <Button
+                    variant="destructive"
+                    size="sm"
+                    disabled={unassignMutation.isPending}
+                    onClick={() => setUnassignOpen(true)}
+                  >
+                    <UserMinus className="h-4 w-4 mr-1" aria-hidden />
+                    Unassign
+                  </Button>
+                </div>
               </div>
             </CardHeader>
             <CardContent>
+              <p className="text-xs font-medium text-muted-foreground">Device ID</p>
               <p className="text-sm font-medium text-foreground">{patient.assignedDeviceId}</p>
-              {patient.assignedDeviceSerial && (
-                <p className="text-xs text-muted-foreground mt-1">Serial: {patient.assignedDeviceSerial}</p>
-              )}
+              {(() => {
+                const did = patient.assignedDeviceId.trim();
+                const sn = patient.assignedDeviceSerial?.trim();
+                if (!sn || sn === did) return null;
+                return (
+                  <p className="text-xs text-muted-foreground mt-1.5">
+                    Serial no.: <span className="text-foreground font-medium">{sn}</span>
+                  </p>
+                );
+              })()}
             </CardContent>
           </Card>
         )}
+
+        <AlertDialog
+          open={unassignOpen}
+          onOpenChange={(open) => {
+            if (!open && !unassignMutation.isPending) setUnassignOpen(false);
+          }}
+        >
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Unassign device?</AlertDialogTitle>
+              <AlertDialogDescription>
+                Remove{" "}
+                <span className="font-medium text-foreground">{patient.assignedDeviceId}</span> from{" "}
+                <span className="font-medium text-foreground">{patient.fullName}</span>. You can assign a device again
+                from the Devices page.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel disabled={unassignMutation.isPending}>Cancel</AlertDialogCancel>
+              <Button
+                variant="destructive"
+                disabled={unassignMutation.isPending || !patient.assignedDeviceId}
+                onClick={() => {
+                  if (patient.assignedDeviceId) unassignMutation.mutate(patient.assignedDeviceId);
+                }}
+              >
+                {unassignMutation.isPending ? "Unassigning…" : "Unassign"}
+              </Button>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
 
         {patient.medications.length > 0 && (
           <Card className="rounded-xl border bg-card shadow-card">
@@ -161,13 +239,53 @@ const PatientDetail: React.FC = () => {
               </div>
             </CardHeader>
             <CardContent>
-              <ul className="space-y-2">
+              <ul className="space-y-4">
                 {patient.medications.map((m, i) => (
-                  <li key={i} className="text-sm text-foreground">
-                    <span className="font-medium">{m.name}</span>
-                    {m.dosage && ` · ${m.dosage}`}
-                    {m.frequency && ` · ${m.frequency}`}
-                    {m.instructions && ` · ${m.instructions}`}
+                  <li key={i} className="text-sm text-foreground rounded-lg border bg-muted/20 p-3 space-y-2">
+                    <div>
+                      <span className="font-medium">{m.name}</span>
+                      {m.dosage ? <span className="text-muted-foreground"> · {m.dosage}</span> : null}
+                    </div>
+                    {m.instructions ? <p className="text-muted-foreground text-xs">{m.instructions}</p> : null}
+                    {m.schedule ? (
+                      <div className="text-xs space-y-1.5 pt-1 border-t border-border/60">
+                        <p className="text-muted-foreground">
+                          Active{" "}
+                          <span className="text-foreground font-medium">
+                            {m.schedule.startDate} — {m.schedule.endDate}
+                          </span>
+                        </p>
+                        {m.schedule.byDate && Object.keys(m.schedule.byDate).length > 0 ? (
+                          <ul className="space-y-1.5 max-h-48 overflow-y-auto">
+                            {Object.entries(m.schedule.byDate)
+                              .sort(([a], [b]) => a.localeCompare(b))
+                              .map(([date, times]) => (
+                                <li key={date} className="flex flex-wrap gap-x-2 gap-y-0.5">
+                                  <span className="text-muted-foreground shrink-0">{date}</span>
+                                  <span className="text-foreground font-medium">
+                                    {Array.isArray(times) && times.length ? times.join(", ") : "—"}
+                                  </span>
+                                </li>
+                              ))}
+                          </ul>
+                        ) : m.schedule.byDay ? (
+                          <ul className="grid gap-1 sm:grid-cols-2">
+                            {Object.entries(m.schedule.byDay).map(([d, times]) =>
+                              Array.isArray(times) && times.length ? (
+                                <li key={d}>
+                                  <span className="text-muted-foreground">{d}:</span>{" "}
+                                  <span className="text-foreground font-medium">{times.join(", ")}</span>
+                                </li>
+                              ) : null
+                            )}
+                          </ul>
+                        ) : null}
+                      </div>
+                    ) : (
+                      <>
+                        {m.frequency && <p className="text-xs text-muted-foreground">{m.frequency}</p>}
+                      </>
+                    )}
                   </li>
                 ))}
               </ul>
