@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { ArrowLeft, User, Phone, Mail, Calendar, MapPin, Pill, FileText, Monitor, UserMinus, Pencil } from "lucide-react";
-import type { Patient } from "@/data/mockData";
+import type { Patient, PatientMedication } from "@/data/mockData";
 import { usePatients } from "@/contexts/PatientsContext";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -266,7 +266,7 @@ const PatientDetail: React.FC = () => {
           </AlertDialogContent>
         </AlertDialog>
 
-        {patient.medications.length > 0 && (
+        {patient.assignedDeviceId?.trim() && patient.medications.length > 0 && (
           <Card className="rounded-xl border bg-card shadow-card">
             <CardHeader className="pb-2">
               <div className="flex items-center gap-2">
@@ -276,13 +276,18 @@ const PatientDetail: React.FC = () => {
             </CardHeader>
             <CardContent>
               <ul className="space-y-4">
-                {patient.medications.map((m, i) => (
+                {patient.medications.map((m: PatientMedication, i) => (
                   <li key={i} className="text-sm text-foreground rounded-lg border bg-muted/20 p-3 space-y-2">
                     <div>
                       <span className="font-medium">{m.name}</span>
                       {m.dosage ? <span className="text-muted-foreground"> · {m.dosage}</span> : null}
                     </div>
                     {m.instructions ? <p className="text-muted-foreground text-xs">{m.instructions}</p> : null}
+                    {m.maxPouches != null && m.maxPouches > 0 ? (
+                      <p className="text-xs text-muted-foreground">
+                        Max pouches: <span className="font-medium text-foreground">{m.maxPouches}</span>
+                      </p>
+                    ) : null}
                     {m.schedule ? (
                       <div className="text-xs space-y-1.5 pt-1 border-t border-border/60">
                         <p className="text-muted-foreground">

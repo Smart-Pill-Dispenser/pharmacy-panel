@@ -67,6 +67,8 @@ export interface PatientMedication {
   /** Short summary for lists; optional when `schedule` is set */
   frequency?: string;
   instructions?: string;
+  /** Dispenser pouch capacity for this regimen (shown on patient tablet as total pouches). */
+  maxPouches?: number;
   schedule?: MedicationDispenseSchedule;
 }
 

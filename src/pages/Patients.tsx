@@ -337,7 +337,16 @@ const Patients: React.FC = () => {
                         </Button>
                       </div>
                     ) : (
-                      "—"
+                      <Button
+                        type="button"
+                        variant="info"
+                        size="sm"
+                        className="h-8 gap-1.5"
+                        onClick={() => navigate(`/patients/${encodeURIComponent(r.id)}/edit`)}
+                      >
+                        <UserPlus className="h-4 w-4 shrink-0" aria-hidden />
+                        Assign
+                      </Button>
                     )}
                   </td>
                   <td className="px-4 py-3 text-right" onClick={(e) => e.stopPropagation()}>

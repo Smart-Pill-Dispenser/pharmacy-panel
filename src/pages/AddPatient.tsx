@@ -127,6 +127,8 @@ type ScheduledMedicationForm = {
   name: string;
   dosage: string;
   instructions: string;
+  /** Max pouches for dispenser / course capacity (patient tablet shows x / this). */
+  maxPouches: string;
   scheduleStart: string;
   scheduleEnd: string;
   /** Until set, template + per-date UIs stay hidden */
@@ -143,6 +145,7 @@ function createEmptyMedication(): ScheduledMedicationForm {
     name: "",
     dosage: "",
     instructions: "",
+    maxPouches: "",
     scheduleStart: today,
     scheduleEnd: today,
     scheduleMode: null,
@@ -200,11 +203,14 @@ function toPatientMedication(m: ScheduledMedicationForm): PatientMedication {
     byDate[d] = normalizeTimes(m.byDate[d] ?? []);
   }
   const totalSlots = Object.values(byDate).reduce((n, arr) => n + arr.length, 0);
+  const mp = parseInt(m.maxPouches.trim(), 10);
+  const maxPouches = Number.isFinite(mp) && mp > 0 ? mp : undefined;
   return {
     name: m.name.trim(),
     dosage: m.dosage.trim(),
     instructions: m.instructions.trim() || undefined,
     frequency: `${m.scheduleStart} → ${m.scheduleEnd} · ${days.length} day(s) · ${totalSlots} dispense(s)`,
+    ...(maxPouches != null ? { maxPouches } : {}),
     schedule: {
       startDate: m.scheduleStart,
       endDate: m.scheduleEnd,
@@ -216,12 +222,20 @@ function toPatientMedication(m: ScheduledMedicationForm): PatientMedication {
 /** Hydrate the add-patient medication form from an API/mock medication line (first schedule wins). */
 function patientMedicationToForm(pm: PatientMedication | undefined | null): ScheduledMedicationForm {
   const empty = createEmptyMedication();
+  const maxPouchesStr =
+    pm?.maxPouches != null && Number(pm.maxPouches) > 0 ? String(Math.floor(Number(pm.maxPouches))) : "";
   if (!pm?.schedule?.startDate?.trim() || !pm.schedule.endDate?.trim()) {
-    return { ...empty, name: pm?.name?.trim() ?? "", dosage: pm?.dosage?.trim() ?? "", instructions: pm?.instructions?.trim() ?? "" };
+    return {
+      ...empty,
+      name: pm?.name?.trim() ?? "",
+      dosage: pm?.dosage?.trim() ?? "",
+      instructions: pm?.instructions?.trim() ?? "",
+      maxPouches: maxPouchesStr,
+    };
   }
   const start = pm.schedule.startDate.trim();
   const end = pm.schedule.endDate.trim();
-  if (!datesValid(start, end)) return empty;
+  if (!datesValid(start, end)) return { ...empty, maxPouches: maxPouchesStr };
   const rawBy = pm.schedule.byDate && typeof pm.schedule.byDate === "object" ? { ...pm.schedule.byDate } : {};
   const days = datesInRange(start, end);
   const byDate: Record<string, string[]> = {};
@@ -245,6 +259,7 @@ function patientMedicationToForm(pm: PatientMedication | undefined | null): Sche
     name: pm.name?.trim() ?? "",
     dosage: pm.dosage?.trim() ?? "",
     instructions: pm.instructions?.trim() ?? "",
+    maxPouches: maxPouchesStr,
     scheduleStart: start,
     scheduleEnd: end,
     scheduleMode: days.length ? (allSame ? "same" : "custom") : null,
@@ -363,6 +378,22 @@ function SingleMedicationScheduleFields({
                 rows={2}
                 className="resize-none min-h-[72px] border-border/80 bg-background shadow-sm"
               />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Max pouches (dispenser capacity)</Label>
+              <Input
+                type="number"
+                inputMode="numeric"
+                min={1}
+                value={med.maxPouches}
+                onChange={(e) => updateMedication({ maxPouches: e.target.value.replace(/[^\d]/g, "") })}
+                placeholder="e.g. 28"
+                className="border-border/80 bg-background shadow-sm"
+              />
+              <p className="text-xs text-muted-foreground">
+                Shown on the patient tablet as total pouches (e.g. 12 / 28). Optional if the device already
+                defines capacity.
+              </p>
             </div>
           </div>
         </div>
@@ -635,6 +666,10 @@ const AddPatient: React.FC = () => {
   const [validityDialogOpen, setValidityDialogOpen] = useState(false);
   const [pendingAssignDeviceId, setPendingAssignDeviceId] = useState<string>("");
   const [validityDialogDate, setValidityDialogDate] = useState<string>("");
+  const [patientTabletCredentials, setPatientTabletCredentials] = useState<{
+    email: string;
+    password: string;
+  } | null>(null);
 
   const {
     data: patientResp,
@@ -856,7 +891,7 @@ const AddPatient: React.FC = () => {
 
   const openPrescriptionFilePicker = () => prescriptionFileInputRef.current?.click();
 
-  const canProceedStep1 = fullName.trim() && phone.trim();
+  const canProceedStep1 = fullName.trim() && phone.trim() && email.trim();
   const canProceedStep2 = !!medication.name.trim() && scheduleComplete(medication);
   const canProceedStep3 = true;
   const canProceedStep4 = !!assignedDeviceId.trim() && !!assignedDeviceValidUntil.trim();
@@ -935,7 +970,7 @@ const AddPatient: React.FC = () => {
         await pharmacyApi.updatePatient(editPatientId, {
           fullName: fullName.trim(),
           phone: phone.trim(),
-          email: email.trim() || undefined,
+          email: email.trim(),
           dateOfBirth: dateOfBirth.trim() || undefined,
           address: address.trim() || undefined,
           medications: validMeds,
@@ -967,7 +1002,7 @@ const AddPatient: React.FC = () => {
       const body = {
         fullName: fullName.trim(),
         phone: phone.trim(),
-        email: email.trim() || undefined,
+        email: email.trim(),
         dateOfBirth: dateOfBirth.trim() || undefined,
         address: address.trim() || undefined,
         medications: validMeds,
@@ -979,10 +1014,17 @@ const AddPatient: React.FC = () => {
       };
 
       const resp = await pharmacyApi.createPatient(body);
-      const created = (resp?.item ?? resp) as any;
+      const envelope = resp as {
+        item?: Record<string, unknown>;
+        patientAppPassword?: string;
+        patientAppLoginConfigured?: boolean;
+      };
+      const created = (envelope.item ?? resp) as Record<string, unknown>;
+      const tabletPassword = envelope.patientAppPassword;
+      const tabletLoginConfigured = envelope.patientAppLoginConfigured;
 
       const patient: Patient = {
-        id: created.patientId ?? created.id,
+        id: String(created.patientId ?? created.id ?? ""),
         fullName: created.fullName ?? body.fullName,
         phone: created.phone ?? body.phone,
         email: created.email ?? body.email ?? undefined,
@@ -1018,7 +1060,18 @@ const AddPatient: React.FC = () => {
       queryClient.invalidateQueries({ queryKey: ["pharmacy", "devices", "unassigned"] });
       queryClient.invalidateQueries({ queryKey: ["pharmacy", "patients"] });
       queryClient.invalidateQueries({ queryKey: ["pharmacy", "dashboard"] });
-      navigate("/patients");
+
+      if (tabletPassword && email.trim()) {
+        setPatientTabletCredentials({ email: email.trim(), password: tabletPassword });
+      } else {
+        if (tabletLoginConfigured === false) {
+          toast.message("Patient tablet login", {
+            description:
+              "Patient Cognito app client is not set on the API — share credentials another way or configure CognitoPatientClientId.",
+          });
+        }
+        navigate("/patients");
+      }
     } catch (e: any) {
       toast.error(e?.message ?? (isEditMode ? "Failed to update patient" : "Failed to add patient"));
     } finally {
@@ -1517,6 +1570,54 @@ const AddPatient: React.FC = () => {
           </div>
         </div>
       </div>
+
+      <Dialog
+        open={patientTabletCredentials != null}
+        onOpenChange={(open) => {
+          if (open) return;
+          /* Only the footer Close button clears state; ignore overlay / Escape. */
+        }}
+      >
+        <DialogContent
+          className="sm:max-w-md"
+          hideCloseButton
+          onPointerDownOutside={(e) => e.preventDefault()}
+          onEscapeKeyDown={(e) => e.preventDefault()}
+        >
+          <DialogHeader>
+            <DialogTitle>Patient tablet sign-in</DialogTitle>
+            <DialogDescription>
+              Give the patient or caregiver these details. They sign in on the tablet app; they can change the
+              password afterward in Settings.
+            </DialogDescription>
+          </DialogHeader>
+          {patientTabletCredentials ? (
+            <div className="space-y-3 py-1 text-sm">
+              <div>
+                <p className="text-muted-foreground text-xs font-medium uppercase tracking-wide">Email</p>
+                <p className="font-mono text-foreground font-medium break-all">{patientTabletCredentials.email}</p>
+              </div>
+              <div>
+                <p className="text-muted-foreground text-xs font-medium uppercase tracking-wide">Password</p>
+                <p className="font-mono text-foreground font-semibold tracking-wide select-all break-all">
+                  {patientTabletCredentials.password}
+                </p>
+              </div>
+            </div>
+          ) : null}
+          <DialogFooter>
+            <Button
+              type="button"
+              onClick={() => {
+                setPatientTabletCredentials(null);
+                navigate("/patients");
+              }}
+            >
+              Close
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog
         open={validityDialogOpen}
