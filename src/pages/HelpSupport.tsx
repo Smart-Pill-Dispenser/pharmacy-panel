@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useMemo, useEffect } from "react";
-import { HelpCircle, Search, Filter, Calendar, X } from "lucide-react";
+import { AlertTriangle, HelpCircle, Search, Filter, Calendar, X } from "lucide-react";
 import StatusBadge from "@/components/StatusBadge";
 import type { HelpRequest } from "@/data/mockData";
 import { Input } from "@/components/ui/input";
@@ -32,6 +32,7 @@ function parseHelpDate(ts: string): Date {
 const HelpSupport: React.FC = () => {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [kindFilter, setKindFilter] = useState<string>("all");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
   const [page, setPage] = useState(1);
@@ -60,12 +61,14 @@ const HelpSupport: React.FC = () => {
         const q = search.trim().toLowerCase();
         if (q && !r.patientName.toLowerCase().includes(q) && !r.deviceId.toLowerCase().includes(q) && !r.id.toLowerCase().includes(q)) return false;
         if (statusFilter !== "all" && r.status !== statusFilter) return false;
+        if (kindFilter === "sos" && r.requestSource !== "sos") return false;
+        if (kindFilter === "help" && r.requestSource !== "help") return false;
         const logDate = parseHelpDate(r.timestamp);
         if (dateFrom && logDate < new Date(dateFrom + "T00:00:00")) return false;
         if (dateTo && logDate > new Date(dateTo + "T23:59:59")) return false;
         return true;
       }),
-    [requests, search, statusFilter, dateFrom, dateTo]
+    [requests, search, statusFilter, kindFilter, dateFrom, dateTo]
   );
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
@@ -80,10 +83,12 @@ const HelpSupport: React.FC = () => {
   const startItem = filtered.length === 0 ? 0 : (safePage - 1) * pageSize + 1;
   const endItem = Math.min(safePage * pageSize, filtered.length);
 
-  const hasActiveFilters = search.trim().length > 0 || statusFilter !== "all" || dateFrom || dateTo;
+  const hasActiveFilters =
+    search.trim().length > 0 || statusFilter !== "all" || kindFilter !== "all" || dateFrom || dateTo;
   const clearFilters = useCallback(() => {
     setSearch("");
     setStatusFilter("all");
+    setKindFilter("all");
     setDateFrom("");
     setDateTo("");
     setPage(1);
@@ -145,7 +150,9 @@ const HelpSupport: React.FC = () => {
     <div className="space-y-6 animate-slide-in">
       <div>
         <h1 className="text-2xl font-bold text-foreground">Help & Support</h1>
-        <p className="text-sm text-muted-foreground mt-1">View and manage help requests from devices</p>
+        <p className="text-sm text-muted-foreground mt-1">
+          SOS emergencies and help requests from patient devices (same queue).
+        </p>
       </div>
 
       {/* Search and filters toolbar */}
@@ -185,6 +192,17 @@ const HelpSupport: React.FC = () => {
                 <SelectItem value="pending">Pending</SelectItem>
                 <SelectItem value="in_progress">In progress</SelectItem>
                 <SelectItem value="resolved">Resolved</SelectItem>
+              </SelectContent>
+            </Select>
+            <span className="text-sm text-muted-foreground whitespace-nowrap">Type:</span>
+            <Select value={kindFilter} onValueChange={(v) => { setKindFilter(v); setPage(1); }}>
+              <SelectTrigger className="w-[120px]">
+                <SelectValue placeholder="Type" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All types</SelectItem>
+                <SelectItem value="sos">SOS</SelectItem>
+                <SelectItem value="help">Help</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -238,9 +256,9 @@ const HelpSupport: React.FC = () => {
       {!isLoading && !isError && isEmpty && (
         <div className="rounded-xl border border-dashed bg-card p-12 text-center">
           <HelpCircle className="mx-auto h-12 w-12 text-muted-foreground" />
-          <h2 className="mt-4 text-lg font-semibold text-foreground">No help requests yet</h2>
+          <h2 className="mt-4 text-lg font-semibold text-foreground">No SOS or help requests yet</h2>
           <p className="mt-2 text-sm text-muted-foreground max-w-sm mx-auto">
-            When patients or devices submit a help request it will appear here. You can search, filter by status, or filter by date above.
+            When a patient uses SOS or Help on the tablet, it appears here. Refill requests from the device may also use this list.
           </p>
         </div>
       )}
@@ -262,6 +280,7 @@ const HelpSupport: React.FC = () => {
             <thead>
               <tr className="border-b bg-muted/50">
                 <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Request ID</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Type</th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Device</th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider hidden sm:table-cell">Patient</th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider hidden md:table-cell">Timestamp</th>
@@ -277,6 +296,19 @@ const HelpSupport: React.FC = () => {
                       <HelpCircle className="h-4 w-4 shrink-0 text-muted-foreground" />
                       <span className="text-sm font-medium text-card-foreground">{req.id}</span>
                     </div>
+                  </td>
+                  <td className="px-4 py-3">
+                    {req.requestSource === "sos" ? (
+                      <span className="inline-flex items-center gap-1 rounded-full bg-destructive/15 text-destructive text-xs font-medium px-2 py-0.5">
+                        <AlertTriangle className="h-3 w-3" /> SOS
+                      </span>
+                    ) : req.requestSource === "help" ? (
+                      <span className="inline-flex items-center gap-1 rounded-full bg-info/15 text-info text-xs font-medium px-2 py-0.5">
+                        <HelpCircle className="h-3 w-3" /> Help
+                      </span>
+                    ) : (
+                      <span className="text-xs text-muted-foreground">—</span>
+                    )}
                   </td>
                   <td className="px-4 py-3 text-sm text-card-foreground">{req.deviceId}</td>
                   <td className="px-4 py-3 text-sm text-muted-foreground hidden sm:table-cell">{req.patientName}</td>

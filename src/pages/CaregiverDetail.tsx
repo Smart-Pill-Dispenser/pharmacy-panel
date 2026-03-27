@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { useParams, useNavigate, useLocation } from "react-router-dom";
-import { ArrowLeft, Users, Mail, Phone, Monitor } from "lucide-react";
+import { ArrowLeft, Users, Mail, Phone, Monitor, Building2, CalendarClock } from "lucide-react";
 import type { Caregiver } from "@/data/mockData";
 import StatusBadge from "@/components/StatusBadge";
 import { Button } from "@/components/ui/button";
@@ -8,6 +8,7 @@ import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { pharmacyApi } from "@/api/pharmacy";
+import { caregiverFromApiRow, formatCaregiverDateTime } from "@/lib/caregiverFromApi";
 import LoadingCard from "@/components/LoadingCard";
 
 const CaregiverDetail: React.FC = () => {
@@ -16,7 +17,11 @@ const CaregiverDetail: React.FC = () => {
   const location = useLocation();
   const caregiverFromState = (location.state as { caregiver?: Caregiver })?.caregiver;
   const queryClient = useQueryClient();
-  const [caregiver, setCaregiver] = useState<Caregiver | undefined>(caregiverFromState);
+  const [caregiver, setCaregiver] = useState<Caregiver | undefined>(() =>
+    caregiverFromState
+      ? caregiverFromApiRow(caregiverFromState as unknown as Record<string, unknown>)
+      : undefined
+  );
 
   const { data, isLoading, isError } = useQuery({
     queryKey: ["pharmacy", "caregivers", id],
@@ -24,10 +29,12 @@ const CaregiverDetail: React.FC = () => {
     queryFn: () => pharmacyApi.getCaregiver(id!),
   });
 
-  const caregiverFromQuery = (data?.item ?? undefined) as Caregiver | undefined;
+  const caregiverFromQuery = data?.item;
 
   useEffect(() => {
-    if (caregiverFromQuery) setCaregiver(caregiverFromQuery);
+    if (caregiverFromQuery && typeof caregiverFromQuery === "object") {
+      setCaregiver(caregiverFromApiRow(caregiverFromQuery as Record<string, unknown>));
+    }
   }, [caregiverFromQuery]);
 
   const updateCaregiverStatus = useMutation({
@@ -135,6 +142,32 @@ const CaregiverDetail: React.FC = () => {
             <span className="text-sm text-muted-foreground">Status</span>
           </div>
           <StatusBadge status={caregiver.status} />
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="rounded-xl border bg-card p-4 shadow-card">
+          <div className="flex items-center gap-2 mb-2">
+            <Building2 className="h-4 w-4 text-muted-foreground" />
+            <span className="text-sm text-muted-foreground">Organization</span>
+          </div>
+          <p className="text-sm font-medium text-card-foreground font-mono break-all">
+            {caregiver.organizationId?.trim() || "—"}
+          </p>
+        </div>
+        <div className="rounded-xl border bg-card p-4 shadow-card">
+          <div className="flex items-center gap-2 mb-2">
+            <CalendarClock className="h-4 w-4 text-muted-foreground" />
+            <span className="text-sm text-muted-foreground">Record created</span>
+          </div>
+          <p className="text-sm font-medium text-card-foreground">{formatCaregiverDateTime(caregiver.createdAt)}</p>
+        </div>
+        <div className="rounded-xl border bg-card p-4 shadow-card">
+          <div className="flex items-center gap-2 mb-2">
+            <CalendarClock className="h-4 w-4 text-muted-foreground" />
+            <span className="text-sm text-muted-foreground">Last updated</span>
+          </div>
+          <p className="text-sm font-medium text-card-foreground">{formatCaregiverDateTime(caregiver.updatedAt)}</p>
         </div>
       </div>
 

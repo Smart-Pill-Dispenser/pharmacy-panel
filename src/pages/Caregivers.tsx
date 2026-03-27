@@ -34,6 +34,7 @@ import StatusBadge from "@/components/StatusBadge";
 import type { Caregiver } from "@/data/mockData";
 import { pharmacyApi } from "@/api/pharmacy";
 import { sortRecordsNewestFirst } from "@/lib/listSort";
+import { caregiverFromApiRow, formatCaregiverDateTime } from "@/lib/caregiverFromApi";
 import LoadingCard from "@/components/LoadingCard";
 
 const PAGE_SIZE_OPTIONS = [5, 10, 25, 50];
@@ -55,17 +56,19 @@ const Caregivers: React.FC = () => {
   });
 
   useEffect(() => {
-    const items = sortRecordsNewestFirst([...(data?.items ?? [])] as Record<string, unknown>[], ["createdAt", "updatedAt"]) as Caregiver[];
-    setCaregivers(items);
+    const sorted = sortRecordsNewestFirst([...(data?.items ?? [])] as Record<string, unknown>[], ["createdAt", "updatedAt"]);
+    setCaregivers(sorted.map((row) => caregiverFromApiRow(row as Record<string, unknown>)));
   }, [data]);
 
   const filtered = useMemo(
     () => {
+      const q = search.trim().toLowerCase();
       let list = caregivers.filter(
         (c) =>
-          c.name.toLowerCase().includes(search.trim().toLowerCase()) ||
-          c.email.toLowerCase().includes(search.trim().toLowerCase()) ||
-          c.phone.includes(search.trim())
+          c.name.toLowerCase().includes(q) ||
+          c.email.toLowerCase().includes(q) ||
+          c.phone.includes(search.trim()) ||
+          (c.organizationId ?? "").toLowerCase().includes(q)
       );
       if (statusFilter !== "all") list = list.filter((c) => c.status === statusFilter);
       return list;
@@ -235,6 +238,7 @@ const Caregivers: React.FC = () => {
                 <TableHead className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Email</TableHead>
                 <TableHead className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider hidden sm:table-cell">Phone</TableHead>
                 <TableHead className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider hidden md:table-cell">Linked devices</TableHead>
+                <TableHead className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider hidden xl:table-cell">Last updated</TableHead>
                 <TableHead className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Status</TableHead>
                 <TableHead className="px-4 py-3 text-right text-xs font-medium text-muted-foreground uppercase tracking-wider">Actions</TableHead>
               </TableRow>
@@ -265,6 +269,9 @@ const Caregivers: React.FC = () => {
                     {caregiver.linkedDevices.length > 0
                       ? `${caregiver.linkedDevices.length} device${caregiver.linkedDevices.length !== 1 ? "s" : ""}`
                       : "—"}
+                  </TableCell>
+                  <TableCell className="px-4 py-3 text-sm text-muted-foreground hidden xl:table-cell">
+                    {formatCaregiverDateTime(caregiver.updatedAt)}
                   </TableCell>
                   <TableCell className="px-4 py-3">
                     <StatusBadge status={caregiver.status} />

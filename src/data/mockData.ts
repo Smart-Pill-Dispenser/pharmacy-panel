@@ -20,6 +20,8 @@ export interface HelpRequest {
   status: "pending" | "resolved" | "in_progress";
   description: string;
   patientName: string;
+  /** Tablet SOS vs Help when set by elderly-backend */
+  requestSource?: "sos" | "help";
   /** Set when status is resolved: how the issue was resolved */
   resolutionReason?: string;
 }
@@ -31,6 +33,10 @@ export interface Caregiver {
   phone: string;
   linkedDevices: string[];
   status: "active" | "inactive";
+  /** Dynamo / app org key (e.g. pharmacy id or org-default). */
+  organizationId?: string;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface ActivityLog {

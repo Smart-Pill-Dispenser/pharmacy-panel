@@ -359,7 +359,7 @@ const Dashboard: React.FC = () => {
             <div className="flex items-center justify-between border-b p-4">
               <div className="flex items-center gap-2">
                 <HelpCircle className="h-4 w-4 text-info" />
-                <h2 className="font-semibold text-card-foreground">Help Requests</h2>
+                <h2 className="font-semibold text-card-foreground">SOS &amp; help</h2>
               </div>
               <Button variant="ghost" size="sm" onClick={() => navigate("/help-support")}>
                 View All
@@ -367,13 +367,25 @@ const Dashboard: React.FC = () => {
             </div>
             <div className="divide-y">
               {(previews.helpRequests ?? []).length === 0 ? (
-                <div className="p-4 text-sm text-muted-foreground">No recent help requests.</div>
+                <div className="p-4 text-sm text-muted-foreground">No recent SOS or help requests.</div>
               ) : (
                 (previews.helpRequests ?? []).map((req: any) => (
                   <div key={req.id} className="p-4">
                     <div className="flex items-center justify-between mb-1">
                       <p className="text-sm font-medium text-card-foreground">{req.patientName}</p>
-                      <StatusBadge status={badgeStatus(req.status)} />
+                      <div className="flex items-center gap-2 shrink-0">
+                        {req.requestSource === "sos" && (
+                          <span className="text-[10px] font-semibold uppercase tracking-wide text-destructive bg-destructive/10 px-2 py-0.5 rounded-full">
+                            SOS
+                          </span>
+                        )}
+                        {req.requestSource === "help" && (
+                          <span className="text-[10px] font-semibold uppercase tracking-wide text-info bg-info/10 px-2 py-0.5 rounded-full">
+                            Help
+                          </span>
+                        )}
+                        <StatusBadge status={badgeStatus(req.status)} />
+                      </div>
                     </div>
                     <p className="text-xs text-muted-foreground">
                       {req.deviceId} • {req.timestamp}
