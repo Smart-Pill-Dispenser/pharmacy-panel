@@ -36,6 +36,8 @@ import { recordTimeMs, sortRecordsNewestFirst } from "@/lib/listSort";
 
 type DeviceRow = {
   id: string;
+  /** Human-facing serial / label when different from Dynamo `id` (tablet often uses this). */
+  serialNumber: string | null;
   patientId: string | null;
   patientLabel: string | null;
 };
@@ -52,18 +54,34 @@ function patientInfoFromDevice(d: Record<string, unknown>): { patientId: string 
 
 function mergePatientFromAssignments(
   deviceId: string,
+  serialCandidates: string[],
   fromDevice: { patientId: string | null; patientLabel: string | null },
   patientByDeviceId: Map<string, { patientId: string; patientLabel: string }>
 ): { patientId: string | null; patientLabel: string | null } {
   let { patientId, patientLabel } = fromDevice;
   if (!patientId) {
-    const alt = patientByDeviceId.get(deviceId.trim());
-    if (alt) {
-      patientId = alt.patientId;
-      patientLabel = alt.patientLabel;
+    for (const key of serialCandidates) {
+      const k = key.trim();
+      if (!k) continue;
+      const alt = patientByDeviceId.get(k);
+      if (alt) {
+        patientId = alt.patientId;
+        patientLabel = alt.patientLabel;
+        break;
+      }
     }
   }
   return { patientId, patientLabel };
+}
+
+function deviceSerialFromRecord(d: Record<string, unknown>): string | null {
+  const s = String(d.serialNumber ?? "").trim();
+  return s || null;
+}
+
+function rowSearchHaystack(row: DeviceRow): string {
+  const parts = [row.id, row.serialNumber ?? "", row.patientLabel ?? ""].filter(Boolean);
+  return parts.join("\n").toLowerCase();
 }
 
 const PAGE_SIZE_OPTIONS = [5, 10, 25, 50];
@@ -164,14 +182,23 @@ const Devices: React.FC = () => {
   /** If patient has `assignedDeviceId` but device row lacked `patientId` (legacy rows), still treat as assigned. */
   const patientByDeviceId = useMemo(() => {
     const m = new Map<string, { patientId: string; patientLabel: string }>();
+    const items = (patientsListData?.items ?? []) as Record<string, unknown>[];
+    const byPatientId = new Map<string, Record<string, unknown>>();
+    for (const it of items) {
+      const pid = String(it.patientId ?? it.id ?? "").trim();
+      if (pid) byPatientId.set(pid, it);
+    }
     for (const p of patientsForAssign) {
       const did = p.deviceId?.trim();
       if (did) {
         m.set(did, { patientId: p.id, patientLabel: p.name });
       }
+      const match = byPatientId.get(p.id);
+      const serial = match ? String((match as { assignedDeviceSerial?: string }).assignedDeviceSerial ?? "").trim() : "";
+      if (serial) m.set(serial, { patientId: p.id, patientLabel: p.name });
     }
     return m;
-  }, [patientsForAssign]);
+  }, [patientsForAssign, patientsListData?.items]);
 
   const rows: DeviceRow[] = useMemo(() => {
     const orgItemsSorted = sortRecordsNewestFirst([...(devicesData?.items ?? [])] as Record<string, unknown>[], [
@@ -182,9 +209,16 @@ const Devices: React.FC = () => {
 
     const orgTagged = orgItemsSorted.map((d) => {
       const did = String(d.id ?? "");
-      const merged = mergePatientFromAssignments(did, patientInfoFromDevice(d), patientByDeviceId);
+      const serial = deviceSerialFromRecord(d);
+      const keys = [did, serial ?? ""].filter((x) => x.trim().length > 0);
+      const merged = mergePatientFromAssignments(did, keys, patientInfoFromDevice(d), patientByDeviceId);
       return {
-        row: { id: did, patientId: merged.patientId, patientLabel: merged.patientLabel } satisfies DeviceRow,
+        row: {
+          id: did,
+          serialNumber: serial,
+          patientId: merged.patientId,
+          patientLabel: merged.patientLabel,
+        } satisfies DeviceRow,
         ms: recordTimeMs(d.createdAt ?? d.lastActionAt),
         id: did,
       };
@@ -194,14 +228,18 @@ const Devices: React.FC = () => {
     const globalTagged = globalSlim
       .filter((d) => d.id && !seen.has(d.id))
       .map((d) => {
+        const sn = String(d.serialNumber ?? "").trim() || null;
+        const keys = [d.id, sn ?? ""].filter((x) => x.trim().length > 0);
         const merged = mergePatientFromAssignments(
           d.id,
+          keys,
           { patientId: null, patientLabel: null },
           patientByDeviceId
         );
         return {
           row: {
             id: d.id,
+            serialNumber: sn,
             patientId: merged.patientId,
             patientLabel: merged.patientLabel,
           } satisfies DeviceRow,
@@ -218,10 +256,7 @@ const Devices: React.FC = () => {
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
     return rows.filter((row) => {
-      const matchesSearch =
-        !q ||
-        row.id.toLowerCase().includes(q) ||
-        (row.patientLabel?.toLowerCase().includes(q) ?? false);
+      const matchesSearch = !q || rowSearchHaystack(row).includes(q);
       if (!matchesSearch) return false;
       if (assignmentFilter !== "all") {
         const hasPatient = row.patientId != null;
@@ -273,7 +308,7 @@ const Devices: React.FC = () => {
           <div className="relative flex-1 min-w-[200px] max-w-sm">
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground pointer-events-none" />
             <Input
-              placeholder="Search by device ID or patient..."
+              placeholder="Search by device id, serial, or patient..."
               value={search}
               onChange={(e) => {
                 setSearch(e.target.value);
@@ -471,7 +506,7 @@ const Devices: React.FC = () => {
             <thead>
               <tr className="border-b bg-muted/50">
                 <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                  Device ID
+                  Device
                 </th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
                   Patient
@@ -491,7 +526,16 @@ const Devices: React.FC = () => {
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-2">
                       <Monitor className="h-4 w-4 shrink-0 text-muted-foreground" />
-                      <span className="text-sm font-medium text-card-foreground">{row.id}</span>
+                      <div className="min-w-0">
+                        <span className="text-sm font-medium text-card-foreground">
+                          {(row.serialNumber && row.serialNumber !== row.id ? row.serialNumber : null) || row.id}
+                        </span>
+                        {row.serialNumber && row.serialNumber !== row.id ? (
+                          <span className="block text-xs text-muted-foreground truncate" title={row.id}>
+                            ID: {row.id}
+                          </span>
+                        ) : null}
+                      </div>
                     </div>
                   </td>
                   <td className="px-4 py-3 text-sm" onClick={(e) => e.stopPropagation()}>

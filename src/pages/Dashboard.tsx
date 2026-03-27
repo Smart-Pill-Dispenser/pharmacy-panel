@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Monitor, HelpCircle, Bell, Package } from "lucide-react";
+import { Monitor, HelpCircle, Bell, Package, UserCheck } from "lucide-react";
 import StatCard from "@/components/StatCard";
 import StatusBadge from "@/components/StatusBadge";
 import { Button } from "@/components/ui/button";
@@ -22,6 +22,23 @@ function badgeStatus(s: string): "online" | "offline" | "error" | "stopped" | "p
   return "offline";
 }
 
+function invHasPatient(d: Record<string, unknown>): boolean {
+  const pid = d.patientId ?? (d.patient as { id?: string } | undefined)?.id;
+  return pid != null && String(pid).trim() !== "";
+}
+
+function invStatusLower(s: unknown): string {
+  return String(s ?? "offline").toLowerCase();
+}
+
+function invNeedsRefillAdminKpi(d: Record<string, unknown>): boolean {
+  const remaining = Number(d.remainingPouches ?? d.dosesRemaining ?? 0);
+  const td = Number(d.totalPouches ?? d.totalDoses ?? 0);
+  const legacyPlaceholder = td === 28 && remaining === 0;
+  const rem = legacyPlaceholder ? 0 : remaining;
+  return rem <= 5;
+}
+
 const Dashboard: React.FC = () => {
   const [period, setPeriod] = useState<Period>("weekly");
   const navigate = useNavigate();
@@ -32,44 +49,101 @@ const Dashboard: React.FC = () => {
     staleTime: 30_000,
   });
 
+  const { data: inventory, isLoading: invLoading } = useQuery({
+    queryKey: ["pharmacy", "devices", "dashboard-inventory"],
+    queryFn: () => pharmacyApi.getDevices({ limit: 500 }),
+    staleTime: 30_000,
+  });
+
   const summary = data?.summary ?? {};
   const previews = data?.previews ?? {};
 
   const dispenseData = (data as any)?.charts?.dispense?.points ?? [];
   const helpData = (data as any)?.charts?.help?.points ?? [];
 
-  const assignedDevices = summary.assignedDevices ?? 0;
-  const totalHardwareDevices = summary.totalHardwareDevices ?? 0;
-  const totalDevices = summary.totalDevices ?? 0;
-  const onlineDevices = summary.onlineDevices ?? 0;
-  const needsRefill = summary.needsRefill ?? 0;
-  const pendingHelp = summary.pendingHelp ?? 0;
+  /** GET /pharmacy/devices includes global pool server-side; use as fallback if dashboard payload is behind an older API. */
+  const invItems = (inventory?.items ?? []) as Record<string, unknown>[];
+  const invCount = inventory?.count ?? invItems.length;
+  const dashTotalDevices = summary.totalDevices ?? 0;
+  const preferInventoryKpis =
+    invCount > dashTotalDevices || (dashTotalDevices === 0 && invCount > 0);
 
-  const deviceStatusDistribution = useMemo(
-    () => [
-      {
-        name: "Online",
-        value: summary.onlineDevices ?? 0,
-        color: "hsl(160, 84%, 39%)",
-      },
-      {
-        name: "Offline",
-        value: summary.offlineDevices ?? Math.max(0, totalDevices - (summary.onlineDevices ?? 0)),
-        color: "hsl(var(--muted-foreground))",
-      },
-      {
-        name: "Error",
-        value: summary.errorDevices ?? 0,
-        color: "hsl(0, 84%, 60%)",
-      },
-      {
-        name: "Stopped",
-        value: summary.stoppedDevices ?? 0,
-        color: "hsl(38, 92%, 50%)",
-      },
-    ],
-    [summary, totalDevices]
-  );
+  const kpiLoading = isLoading || invLoading;
+
+  const {
+    totalDevices,
+    assignedDeviceCount,
+    needsRefillCount,
+    deviceStatusDistribution,
+  } = useMemo(() => {
+    if (!preferInventoryKpis || invItems.length === 0) {
+      const total = dashTotalDevices;
+      const online = summary.onlineDevices ?? 0;
+      return {
+        totalDevices: total,
+        assignedDeviceCount: summary.assignedDevices ?? 0,
+        needsRefillCount: summary.needsRefill ?? 0,
+        deviceStatusDistribution: [
+          { name: "Online", value: online, color: "hsl(160, 84%, 39%)" },
+          {
+            name: "Offline",
+            value: summary.offlineDevices ?? Math.max(0, total - online),
+            color: "hsl(var(--muted-foreground))",
+          },
+          { name: "Error", value: summary.errorDevices ?? 0, color: "hsl(0, 84%, 60%)" },
+          { name: "Stopped", value: summary.stoppedDevices ?? 0, color: "hsl(38, 92%, 50%)" },
+        ],
+      };
+    }
+    let online = 0;
+    let offline = 0;
+    let errorN = 0;
+    let stopped = 0;
+    for (const d of invItems) {
+      const s = invStatusLower(d.status);
+      if (s === "online") online++;
+      else if (s === "error") errorN++;
+      else if (s === "stopped") stopped++;
+      else offline++;
+    }
+    const assigned = invItems.filter(invHasPatient).length;
+    const refill = invItems.filter((d) => invHasPatient(d) && invNeedsRefillAdminKpi(d)).length;
+    const refillFromSummary = Number(summary.needsRefill ?? 0);
+    return {
+      totalDevices: invCount,
+      assignedDeviceCount: assigned,
+      needsRefillCount: Math.max(refill, refillFromSummary),
+      deviceStatusDistribution: [
+        { name: "Online", value: online, color: "hsl(160, 84%, 39%)" },
+        { name: "Offline", value: offline, color: "hsl(var(--muted-foreground))" },
+        { name: "Error", value: errorN, color: "hsl(0, 84%, 60%)" },
+        { name: "Stopped", value: stopped, color: "hsl(38, 92%, 50%)" },
+      ],
+    };
+  }, [preferInventoryKpis, invItems, invCount, dashTotalDevices, summary]);
+
+  const pendingAlerts = summary.pendingAlerts ?? 0;
+
+  const devicesOverviewRows = useMemo(() => {
+    const fromDash = (previews.devices ?? []) as any[];
+    if (preferInventoryKpis && invItems.length > 0) {
+      return invItems.slice(0, 8).map((d) => {
+        const id = String(d.id ?? "");
+        const serial = String(d.serialNumber ?? "").trim();
+        const sub = serial && serial !== id ? `${id} · ${serial}` : id;
+        return {
+          id,
+          patientName: invHasPatient(d) ? String(d.patientName ?? "Patient").trim() || "Patient" : "Unassigned",
+          serialNumber: sub,
+          remainingPouches: Number(d.remainingPouches ?? d.dosesRemaining ?? 0),
+          totalPouches: Number(d.totalPouches ?? d.totalDoses ?? 0) || 1,
+          status: invStatusLower(d.status),
+        };
+      });
+    }
+    if (fromDash.length > 0) return fromDash;
+    return [];
+  }, [previews.devices, preferInventoryKpis, invItems]);
 
   const pieHasData = deviceStatusDistribution.some((d) => d.value > 0);
   const dispenseHasData = dispenseData.some((p: any) => (p.dispensed ?? 0) + (p.errors ?? 0) + (p.refills ?? 0) > 0);
@@ -93,36 +167,36 @@ const Dashboard: React.FC = () => {
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard
-          title="Hardware (assigned / total)"
-          value={`${assignedDevices} / ${totalHardwareDevices}`}
-          icon={<Monitor className="h-5 w-5 text-info" />}
-          trend="devices in your pharmacy"
-          variant="info"
-          loading={isLoading}
-        />
-        <StatCard
           title="Total Devices"
           value={totalDevices}
-          icon={<Monitor className="h-5 w-5 text-success" />}
-          trend={`${onlineDevices} online`}
+          icon={<Monitor className="h-5 w-5 text-info" />}
+          trend="devices"
+          variant="info"
+          loading={kpiLoading}
+        />
+        <StatCard
+          title="Assigned devices"
+          value={assignedDeviceCount}
+          icon={<UserCheck className="h-5 w-5 text-success" />}
+          trend="with patient"
           variant="success"
-          loading={isLoading}
+          loading={kpiLoading}
         />
         <StatCard
           title="Needs Refill"
-          value={needsRefill}
+          value={needsRefillCount}
           icon={<Package className="h-5 w-5 text-warning" />}
-          trend="At or below threshold"
+          trend="Below threshold"
           variant="warning"
-          loading={isLoading}
+          loading={kpiLoading}
         />
         <StatCard
-          title="Help Requests"
-          value={pendingHelp}
+          title="Pending Alerts"
+          value={pendingAlerts}
           icon={<HelpCircle className="h-5 w-5 text-destructive" />}
-          trend="Pending / in progress"
+          trend="Unacknowledged"
           variant="destructive"
-          loading={isLoading}
+          loading={kpiLoading}
         />
       </div>
 
@@ -205,7 +279,7 @@ const Dashboard: React.FC = () => {
 
           <div className="rounded-xl border bg-card shadow-card p-5">
             <h3 className="text-sm font-semibold text-card-foreground mb-4">Device Status Distribution</h3>
-            {isLoading ? (
+            {kpiLoading ? (
               <div className="h-[250px] flex items-center justify-center p-5">
                 <div className="h-32 w-32 rounded-full bg-muted/30 dark:bg-muted/20 animate-pulse" />
               </div>
@@ -289,10 +363,10 @@ const Dashboard: React.FC = () => {
             </Button>
           </div>
           <div className="divide-y">
-            {(previews.devices ?? []).length === 0 ? (
+            {devicesOverviewRows.length === 0 ? (
               <div className="p-4 text-sm text-muted-foreground">No devices linked to your pharmacy yet.</div>
             ) : (
-              (previews.devices ?? []).map((device: any) => (
+              devicesOverviewRows.map((device: any) => (
                 <div
                   key={device.id}
                   className="flex items-center justify-between p-4 hover:bg-muted/50 cursor-pointer transition-colors"

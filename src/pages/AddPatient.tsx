@@ -1432,19 +1432,29 @@ const AddPatient: React.FC = () => {
                       Add devices to inventory first, then return to assign one to this patient.
                     </p>
                   </div>
-                ) : devicesForAssignStep.length === 0 ? (
-                  <p className="text-sm text-muted-foreground py-6 text-center">No devices match your search.</p>
                 ) : (
                   <div className="space-y-3">
-                    <div className="relative">
+                    <div className="relative max-w-md">
                       <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground pointer-events-none" />
                       <Input
                         placeholder="Search by device id or serial…"
                         value={deviceAssignSearch}
                         onChange={(e) => setDeviceAssignSearch(e.target.value)}
-                        className="pl-9"
+                        className="pl-9 pr-9"
                         aria-label="Search devices"
                       />
+                      {deviceAssignSearch.length > 0 ? (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7 text-muted-foreground hover:text-foreground"
+                          onClick={() => setDeviceAssignSearch("")}
+                          aria-label="Clear search"
+                        >
+                          <X className="h-4 w-4" />
+                        </Button>
+                      ) : null}
                     </div>
                     {assignedDeviceValidUntil.trim() ? (
                       <p className="text-xs text-muted-foreground">
@@ -1452,70 +1462,79 @@ const AddPatient: React.FC = () => {
                         <span className="font-medium text-foreground">{assignedDeviceValidUntil}</span>
                       </p>
                     ) : null}
-                    <div className="overflow-hidden rounded-xl border border-primary/20 bg-card/95 shadow-inner">
-                      <div className="max-h-[min(280px,42vh)] overflow-y-auto overscroll-contain">
-                        <table className="w-full">
-                          <thead className="sticky top-0 z-10 bg-primary/[0.07] shadow-sm">
-                            <tr className="border-b border-primary/15">
-                              <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider bg-primary/[0.07]">
-                                Device ID
-                              </th>
-                              <th className="px-4 py-3 text-right text-xs font-medium text-muted-foreground uppercase tracking-wider w-28 bg-primary/[0.07]">
-                                Select
-                              </th>
-                            </tr>
-                          </thead>
-                          <tbody className="divide-y">
-                            {devicesForAssignStep.map((dev) => {
-                              const selected = deviceRowMatchesSelection(dev, assignedDeviceId);
-                              const displayLabel = dev.serialNumber?.trim() || dev.id;
-                              return (
-                                <tr
-                                  key={dev.id}
-                                  role="button"
-                                  tabIndex={0}
-                                  onClick={() => openDeviceValidityDialog(dev.id)}
-                                  onKeyDown={(e) => {
-                                    if (e.key === "Enter" || e.key === " ") {
-                                      e.preventDefault();
-                                      openDeviceValidityDialog(dev.id);
-                                    }
-                                  }}
-                                  className={cn(
-                                    "cursor-pointer transition-colors",
-                                    selected
-                                      ? "bg-primary/12 hover:bg-primary/16 ring-1 ring-inset ring-primary/25"
-                                      : "hover:bg-muted/35"
-                                  )}
-                                >
-                                  <td className="px-4 py-3">
-                                    <div className="flex items-center gap-2">
-                                      <Monitor
-                                        className={cn(
-                                          "h-4 w-4 shrink-0",
-                                          selected ? "text-primary" : "text-muted-foreground"
-                                        )}
-                                      />
-                                      <span className="text-sm font-medium text-card-foreground">{displayLabel}</span>
-                                    </div>
-                                  </td>
-                                  <td className="px-4 py-3 text-right">
-                                    {selected ? (
-                                      <span className="inline-flex items-center gap-1.5 text-sm font-medium text-primary">
-                                        <CheckCircle2 className="h-4 w-4 shrink-0" />
-                                        Selected
-                                      </span>
-                                    ) : (
-                                      <span className="text-sm text-muted-foreground">—</span>
-                                    )}
-                                  </td>
-                                </tr>
-                              );
-                            })}
-                          </tbody>
-                        </table>
+                    {devicesForAssignStep.length === 0 ? (
+                      <div className="rounded-xl border border-dashed border-border/80 bg-muted/20 py-8 px-4 text-center">
+                        <p className="text-sm font-medium text-foreground">No devices match your search</p>
+                        <p className="mt-1.5 text-sm text-muted-foreground max-w-md mx-auto">
+                          Try another device id or serial, or clear the search to see all available devices.
+                        </p>
                       </div>
-                    </div>
+                    ) : (
+                      <div className="overflow-hidden rounded-xl border border-primary/20 bg-card/95 shadow-inner">
+                        <div className="max-h-[min(280px,42vh)] overflow-y-auto overscroll-contain">
+                          <table className="w-full">
+                            <thead className="sticky top-0 z-10 bg-primary/[0.07] shadow-sm">
+                              <tr className="border-b border-primary/15">
+                                <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider bg-primary/[0.07]">
+                                  Device ID
+                                </th>
+                                <th className="px-4 py-3 text-right text-xs font-medium text-muted-foreground uppercase tracking-wider w-28 bg-primary/[0.07]">
+                                  Select
+                                </th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y">
+                              {devicesForAssignStep.map((dev) => {
+                                const selected = deviceRowMatchesSelection(dev, assignedDeviceId);
+                                const displayLabel = dev.serialNumber?.trim() || dev.id;
+                                return (
+                                  <tr
+                                    key={dev.id}
+                                    role="button"
+                                    tabIndex={0}
+                                    onClick={() => openDeviceValidityDialog(dev.id)}
+                                    onKeyDown={(e) => {
+                                      if (e.key === "Enter" || e.key === " ") {
+                                        e.preventDefault();
+                                        openDeviceValidityDialog(dev.id);
+                                      }
+                                    }}
+                                    className={cn(
+                                      "cursor-pointer transition-colors",
+                                      selected
+                                        ? "bg-primary/12 hover:bg-primary/16 ring-1 ring-inset ring-primary/25"
+                                        : "hover:bg-muted/35"
+                                    )}
+                                  >
+                                    <td className="px-4 py-3">
+                                      <div className="flex items-center gap-2">
+                                        <Monitor
+                                          className={cn(
+                                            "h-4 w-4 shrink-0",
+                                            selected ? "text-primary" : "text-muted-foreground"
+                                          )}
+                                        />
+                                        <span className="text-sm font-medium text-card-foreground">{displayLabel}</span>
+                                      </div>
+                                    </td>
+                                    <td className="px-4 py-3 text-right">
+                                      {selected ? (
+                                        <span className="inline-flex items-center gap-1.5 text-sm font-medium text-primary">
+                                          <CheckCircle2 className="h-4 w-4 shrink-0" />
+                                          Selected
+                                        </span>
+                                      ) : (
+                                        <span className="text-sm text-muted-foreground">—</span>
+                                      )}
+                                    </td>
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>

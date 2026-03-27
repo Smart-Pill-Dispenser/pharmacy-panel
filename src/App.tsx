@@ -57,20 +57,7 @@ function RouteRestorer() {
   // to `/login` before `useEffect` runs on refresh.
   try {
     if (!PUBLIC_PATHS.includes(location.pathname)) {
-      // Important: when the app is (re)loaded from `/`, we must not overwrite an
-      // already-saved non-root route. Otherwise the restore logic below can't
-      // send the user back to the screen they were on before refresh.
-      const existing = sessionStorage.getItem(LAST_ROUTE_KEY);
-      const next = location.pathname + location.search;
-
-      if (location.pathname === "/") {
-        // Only overwrite if we don't already have a saved deep link.
-        if (existing === null || existing === "/") {
-          sessionStorage.setItem(LAST_ROUTE_KEY, next);
-        }
-      } else {
-        sessionStorage.setItem(LAST_ROUTE_KEY, next);
-      }
+      sessionStorage.setItem(LAST_ROUTE_KEY, location.pathname + location.search);
     }
   } catch {
     // Non-fatal
