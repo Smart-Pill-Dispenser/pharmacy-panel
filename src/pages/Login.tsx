@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { Link } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -7,6 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Eye, EyeOff, Pill } from "lucide-react";
 
 const Login: React.FC = () => {
+  const { t } = useTranslation();
   const { login } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -17,7 +19,7 @@ const Login: React.FC = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!email || !password) {
-      setError("Please enter both email and password");
+      setError(t("login.errBoth"));
       return;
     }
     setLoading(true);
@@ -25,7 +27,7 @@ const Login: React.FC = () => {
     try {
       await login(email, password);
     } catch {
-      setError("Login failed. Please try again.");
+      setError(t("login.errFailed"));
     } finally {
       setLoading(false);
     }
@@ -33,37 +35,35 @@ const Login: React.FC = () => {
 
   return (
     <div className="flex min-h-screen">
-      {/* Left panel */}
       <div className="hidden lg:flex lg:w-1/2 gradient-hero items-center justify-center p-12">
         <div className="max-w-md text-center">
           <div className="mx-auto mb-8 flex h-20 w-20 items-center justify-center rounded-2xl bg-primary">
             <Pill className="h-10 w-10 text-primary-foreground" />
           </div>
           <h1 className="mb-4 text-4xl font-bold text-primary-foreground tracking-tight">
-            Navos ZET
+            {t("app.brand")}
           </h1>
           <p className="text-lg text-sidebar-fg/70">
-            Pharmacy Management Panel — Monitor devices, manage refills, and ensure patient safety from one centralized dashboard.
+            {t("login.hero")}
           </p>
         </div>
       </div>
 
-      {/* Right panel - Login form */}
       <div className="flex w-full lg:w-1/2 items-center justify-center p-8">
         <div className="w-full max-w-sm">
           <div className="mb-8 lg:hidden flex items-center gap-3 justify-center">
             <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary">
               <Pill className="h-5 w-5 text-primary-foreground" />
             </div>
-            <span className="text-xl font-bold text-foreground">Navos ZET</span>
+            <span className="text-xl font-bold text-foreground">{t("app.brand")}</span>
           </div>
 
-          <h2 className="mb-2 text-2xl font-bold text-foreground">Welcome back</h2>
-          <p className="mb-8 text-muted-foreground">Sign in to your pharmacy panel</p>
+          <h2 className="mb-2 text-2xl font-bold text-foreground">{t("login.welcomeBack")}</h2>
+          <p className="mb-8 text-muted-foreground">{t("login.subtitle")}</p>
 
           <form onSubmit={handleSubmit} className="space-y-5">
             <div className="space-y-2">
-              <Label htmlFor="email">Email</Label>
+              <Label htmlFor="email">{t("login.emailLabel")}</Label>
               <Input
                 id="email"
                 type="email"
@@ -75,12 +75,12 @@ const Login: React.FC = () => {
             </div>
             <div className="space-y-2">
               <div className="flex items-center justify-between">
-                <Label htmlFor="password">Password</Label>
+                <Label htmlFor="password">{t("login.passwordLabel")}</Label>
                 <Link
                   to="/forgot-password"
                   className="text-sm font-medium text-primary hover:underline"
                 >
-                  Forgot password?
+                  {t("login.forgotPassword")}
                 </Link>
               </div>
               <div className="relative">
@@ -96,7 +96,7 @@ const Login: React.FC = () => {
                   type="button"
                   onClick={() => setShowPassword((v) => !v)}
                   className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                  aria-label={showPassword ? "Hide password" : "Show password"}
+                  aria-label={showPassword ? t("login.hidePassword") : t("login.showPassword")}
                 >
                   {showPassword ? (
                     <EyeOff className="h-4 w-4" />
@@ -112,7 +112,7 @@ const Login: React.FC = () => {
             )}
 
             <Button type="submit" className="w-full h-11" disabled={loading}>
-              {loading ? "Signing in..." : "Sign In"}
+              {loading ? t("login.signingIn") : t("login.signIn")}
             </Button>
           </form>
 

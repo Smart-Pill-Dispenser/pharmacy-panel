@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
+import { Trans, useTranslation } from "react-i18next";
 import { ArrowLeft, Monitor, StopCircle, Play, AlertTriangle, Clock, Package, User, Calendar, FileText, UserMinus } from "lucide-react";
 import type { ActivityLog, Device } from "@/data/mockData";
 import { Button } from "@/components/ui/button";
@@ -37,11 +38,16 @@ function hasAssignedPatient(d: Device & Record<string, unknown>): boolean {
   return pid != null && String(pid).trim() !== "";
 }
 
-function deviceSubtitleLines(d: Device & Record<string, unknown>): string {
+function deviceSubtitleLines(d: Device & Record<string, unknown>, emptyLabel: string): string {
   const id = String(d.id ?? "").trim();
   const serial = String(d.serialNumber ?? "").trim();
-  if (!serial || serial === id) return id || "—";
+  if (!serial || serial === id) return id || emptyLabel;
   return `${id} · ${serial}`;
+}
+
+function formatLogTypeLabel(t: (key: string, opts?: { defaultValue?: string }) => string, type: string): string {
+  const human = type.replace(/_/g, " ");
+  return t(`deviceDetail.logTypes.${type}`, { defaultValue: human });
 }
 
 function parseLogDate(ts: string): Date {
@@ -50,6 +56,7 @@ function parseLogDate(ts: string): Date {
 }
 
 const DeviceDetail: React.FC = () => {
+  const { t } = useTranslation();
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -101,9 +108,9 @@ const DeviceDetail: React.FC = () => {
     return raw.map((row) => {
       const r = row as ActivityLog & { message?: string };
       const description = r.description?.trim() || r.message?.trim() || "";
-      return { ...r, description: description || r.description || r.message || "—" };
+      return { ...r, description: description || r.description || r.message || t("common.dash") };
     });
-  }, [logsResp?.items]);
+  }, [logsResp?.items, t]);
 
   const logs = useMemo(() => {
     let list = logsAll;
@@ -143,9 +150,9 @@ const DeviceDetail: React.FC = () => {
       queryClient.invalidateQueries({ queryKey: ["pharmacy", "devices", id] });
       queryClient.invalidateQueries({ queryKey: ["pharmacy", "devices", logsDeviceId, "logs"] });
       setShowStopDialog(false);
-      toast.success("Dispensing stopped");
+      toast.success(t("deviceDetail.stoppedToast"));
     },
-    onError: (e: any) => toast.error(e?.message ?? "Failed to stop dispensing"),
+    onError: (e: any) => toast.error(e?.message ?? t("deviceDetail.stopFailed")),
   });
 
   const resumeMutation = useMutation({
@@ -154,9 +161,9 @@ const DeviceDetail: React.FC = () => {
       setDeviceStatus("online");
       queryClient.invalidateQueries({ queryKey: ["pharmacy", "devices", id] });
       queryClient.invalidateQueries({ queryKey: ["pharmacy", "devices", logsDeviceId, "logs"] });
-      toast.success("Dispensing resumed");
+      toast.success(t("deviceDetail.resumedToast"));
     },
-    onError: (e: any) => toast.error(e?.message ?? "Failed to resume dispensing"),
+    onError: (e: any) => toast.error(e?.message ?? t("deviceDetail.resumeFailed")),
   });
 
   const unassignMutation = useMutation({
@@ -172,21 +179,21 @@ const DeviceDetail: React.FC = () => {
       const pid = String((device as any)?.patientId ?? (device as any)?.patient?.id ?? "").trim();
       if (pid) await queryClient.invalidateQueries({ queryKey: ["pharmacy", "patients", pid] });
       setUnassignOpen(false);
-      toast.success("Device unassigned from patient");
+      toast.success(t("devices.unassignToast"));
     },
-    onError: (e: any) => toast.error(e?.message ?? "Failed to unassign device"),
+    onError: (e: any) => toast.error(e?.message ?? t("devices.unassignFailed")),
   });
 
   if (deviceLoading) {
-    return <LoadingCard message="Loading device…" />;
+    return <LoadingCard message={t("deviceDetail.loading")} />;
   }
 
   if (deviceError) {
     return (
       <div className="flex flex-col items-center justify-center py-20">
-        <p className="text-destructive mb-4">Failed to load device.</p>
+        <p className="text-destructive mb-4">{t("deviceDetail.loadFailed")}</p>
         <Button variant="outline" onClick={() => navigate("/devices")}>
-          Back to Devices
+          {t("deviceDetail.backToDevices")}
         </Button>
       </div>
     );
@@ -195,9 +202,9 @@ const DeviceDetail: React.FC = () => {
   if (!device) {
     return (
       <div className="flex flex-col items-center justify-center py-20">
-        <p className="text-muted-foreground mb-4">Device not found</p>
+        <p className="text-muted-foreground mb-4">{t("deviceDetail.notFound")}</p>
         <Button variant="outline" onClick={() => navigate("/devices")}>
-          Back to Devices
+          {t("deviceDetail.backToDevices")}
         </Button>
       </div>
     );
@@ -209,8 +216,9 @@ const DeviceDetail: React.FC = () => {
   const totalPouches = Number(device.totalPouches);
   const safeRemaining = Number.isFinite(remaining) ? remaining : 0;
   const safeTotal = Number.isFinite(totalPouches) && totalPouches > 0 ? totalPouches : 0;
+  const dash = t("common.dash");
   const pouchLabel =
-    safeTotal > 0 ? `${safeRemaining} / ${safeTotal}` : safeRemaining > 0 ? `${safeRemaining} / —` : "—";
+    safeTotal > 0 ? `${safeRemaining} / ${safeTotal}` : safeRemaining > 0 ? `${safeRemaining} / ${dash}` : dash;
   const pouchPct = safeTotal > 0 ? Math.min(100, Math.max(0, (safeRemaining / safeTotal) * 100)) : 0;
   const threshold = Number(device.refillThreshold);
   const needsRefill =
@@ -218,7 +226,7 @@ const DeviceDetail: React.FC = () => {
   const headerTitle =
     assigned && String(device.patientName ?? "").trim()
       ? device.patientName
-      : "Unassigned device";
+      : t("common.unassignedDevice");
 
   const handleStopDispensing = () => stopMutation.mutate();
   const handleResumeDispensing = () => resumeMutation.mutate();
@@ -236,7 +244,7 @@ const DeviceDetail: React.FC = () => {
   return (
     <div className="space-y-6 animate-slide-in">
       <button onClick={() => navigate(-1)} className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors">
-        <ArrowLeft className="h-4 w-4" /> Back
+        <ArrowLeft className="h-4 w-4" /> {t("common.back")}
       </button>
 
       {/* Device header */}
@@ -247,10 +255,10 @@ const DeviceDetail: React.FC = () => {
           </div>
           <div>
             <h1 className="text-2xl font-bold text-foreground">{headerTitle}</h1>
-            <p className="text-sm text-muted-foreground">{deviceSubtitleLines(device)}</p>
+            <p className="text-sm text-muted-foreground">{deviceSubtitleLines(device, dash)}</p>
             {!assigned && (
               <p className="text-xs text-muted-foreground mt-1">
-                Assign this device to a patient from Add patient or your device inventory to enable dispensing controls.
+                {t("deviceDetail.assignHint")}
               </p>
             )}
           </div>
@@ -263,15 +271,15 @@ const DeviceDetail: React.FC = () => {
               disabled={unassignMutation.isPending}
               onClick={() => setUnassignOpen(true)}
             >
-              <UserMinus className="mr-2 h-4 w-4" /> Unassign
+              <UserMinus className="mr-2 h-4 w-4" /> {t("common.unassign")}
             </Button>
             {currentStatus !== "stopped" ? (
               <Button variant="destructive" onClick={() => setShowStopDialog(true)}>
-                <StopCircle className="mr-2 h-4 w-4" /> Stop Dispensing
+                <StopCircle className="mr-2 h-4 w-4" /> {t("deviceDetail.stopDispensing")}
               </Button>
             ) : (
               <Button variant="success" onClick={handleResumeDispensing}>
-                <Play className="mr-2 h-4 w-4" /> Resume Dispensing
+                <Play className="mr-2 h-4 w-4" /> {t("deviceDetail.resumeDispensing")}
               </Button>
             )}
           </div>
@@ -283,7 +291,7 @@ const DeviceDetail: React.FC = () => {
         <div className="rounded-xl border bg-card p-4 shadow-card">
           <div className="flex items-center gap-2 mb-2">
             <Package className="h-4 w-4 text-muted-foreground" />
-            <span className="text-sm text-muted-foreground">Remaining Pouches</span>
+            <span className="text-sm text-muted-foreground">{t("deviceDetail.remainingPouches")}</span>
           </div>
           <p className="text-xl font-bold text-card-foreground">{pouchLabel}</p>
           <div className="mt-2 h-2 w-full rounded-full bg-muted overflow-hidden">
@@ -297,7 +305,10 @@ const DeviceDetail: React.FC = () => {
           </div>
           {needsRefill && (
             <p className="mt-2 text-xs font-medium text-destructive flex items-center gap-1">
-              <AlertTriangle className="h-3 w-3" /> Below refill threshold ({Number.isFinite(threshold) ? threshold : device.refillThreshold})
+              <AlertTriangle className="h-3 w-3" />{" "}
+              {t("deviceDetail.belowThreshold", {
+                threshold: Number.isFinite(threshold) ? threshold : device.refillThreshold,
+              })}
             </p>
           )}
         </div>
@@ -305,33 +316,33 @@ const DeviceDetail: React.FC = () => {
         <div className="rounded-xl border bg-card p-4 shadow-card">
           <div className="flex items-center gap-2 mb-2">
             <Clock className="h-4 w-4 text-muted-foreground" />
-            <span className="text-sm text-muted-foreground">Last Dispensed</span>
+            <span className="text-sm text-muted-foreground">{t("deviceDetail.lastDispensed")}</span>
           </div>
           <p className="text-sm font-medium text-card-foreground">
-            {String(device.lastDispensed ?? "").trim() || "—"}
+            {String(device.lastDispensed ?? "").trim() || dash}
           </p>
         </div>
 
         <div className="rounded-xl border bg-card p-4 shadow-card">
           <div className="flex items-center gap-2 mb-2">
             <User className="h-4 w-4 text-muted-foreground" />
-            <span className="text-sm text-muted-foreground">Caregiver</span>
+            <span className="text-sm text-muted-foreground">{t("deviceDetail.caregiver")}</span>
           </div>
           <p className="text-sm font-medium text-card-foreground">
-            {String(device.assignedCaregiver ?? "").trim() || "—"}
+            {String(device.assignedCaregiver ?? "").trim() || dash}
           </p>
         </div>
 
         <div className="rounded-xl border bg-card p-4 shadow-card">
           <div className="flex items-center gap-2 mb-2">
             <Calendar className="h-4 w-4 text-muted-foreground" />
-            <span className="text-sm text-muted-foreground">Validity</span>
+            <span className="text-sm text-muted-foreground">{t("deviceDetail.validity")}</span>
           </div>
           {(() => {
             const issue = String(device.issueDate ?? "").trim();
             const validUntil = String(device.validityDate ?? "").trim();
             if (!issue && !validUntil) {
-              return <p className="text-sm font-medium text-card-foreground">—</p>;
+              return <p className="text-sm font-medium text-card-foreground">{dash}</p>;
             }
             return (
               <>
@@ -339,7 +350,11 @@ const DeviceDetail: React.FC = () => {
                   <p className="text-sm font-medium text-card-foreground">{issue}</p>
                 ) : null}
                 {validUntil ? (
-                  <p className="text-xs text-muted-foreground">{issue ? `to ${validUntil}` : `Until ${validUntil}`}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {issue
+                      ? t("deviceDetail.validityTo", { date: validUntil })
+                      : t("deviceDetail.validityUntil", { date: validUntil })}
+                  </p>
                 ) : null}
               </>
             );
@@ -351,8 +366,8 @@ const DeviceDetail: React.FC = () => {
       <div className="rounded-xl border bg-card shadow-card overflow-hidden">
         <div className="border-b bg-muted/30 p-4 flex flex-wrap items-center justify-between gap-4">
           <div>
-            <h2 className="font-semibold text-card-foreground">Activity Logs</h2>
-            <p className="text-xs text-muted-foreground mt-0.5">Chronological order (newest first).</p>
+            <h2 className="font-semibold text-card-foreground">{t("deviceDetail.activityLogs")}</h2>
+            <p className="text-xs text-muted-foreground mt-0.5">{t("deviceDetail.logsHint")}</p>
           </div>
           <div className="flex flex-wrap items-center gap-3">
             <div className="flex items-center gap-2 flex-wrap">
@@ -360,26 +375,28 @@ const DeviceDetail: React.FC = () => {
                 className="min-w-[152px] w-[152px] h-9 pr-9 shrink-0"
                 value={logDateFrom}
                 onChange={(e) => setLogDateFrom(e.target.value)}
-                aria-label="From date"
+                aria-label={t("common.fromDate")}
               />
               <span className="text-muted-foreground text-sm shrink-0">–</span>
               <DateInput
                 className="min-w-[152px] w-[152px] h-9 pr-9 shrink-0"
                 value={logDateTo}
                 onChange={(e) => setLogDateTo(e.target.value)}
-                aria-label="To date"
+                aria-label={t("common.toDate")}
               />
             </div>
             {(logDateFrom || logDateTo) && (
-              <Button variant="ghost" size="sm" onClick={() => { setLogDateFrom(""); setLogDateTo(""); setLogPage(1); }}>Clear dates</Button>
+              <Button variant="ghost" size="sm" onClick={() => { setLogDateFrom(""); setLogDateTo(""); setLogPage(1); }}>
+                {t("common.clearDates")}
+              </Button>
             )}
           </div>
         </div>
         {logsLoading ? (
-          <div className="p-10 text-center text-sm text-muted-foreground">Loading activity logs…</div>
+          <div className="p-10 text-center text-sm text-muted-foreground">{t("deviceDetail.loadingLogs")}</div>
         ) : logsError ? (
           <div className="p-10 text-center text-sm text-destructive space-y-1">
-            <p>Could not load activity logs.</p>
+            <p>{t("deviceDetail.logsLoadFailed")}</p>
             {logsFetchMessage ? (
               <p className="text-xs font-normal text-muted-foreground max-w-md mx-auto">{logsFetchMessage}</p>
             ) : null}
@@ -387,7 +404,7 @@ const DeviceDetail: React.FC = () => {
         ) : logs.length === 0 ? (
           <div className="p-12 text-center">
             <FileText className="mx-auto h-10 w-10 text-muted-foreground/50" />
-            <p className="mt-3 text-sm text-muted-foreground">No activity logs for this device in the selected range.</p>
+            <p className="mt-3 text-sm text-muted-foreground">{t("deviceDetail.noLogsRange")}</p>
           </div>
         ) : (
           <>
@@ -405,14 +422,14 @@ const DeviceDetail: React.FC = () => {
                     </p>
                   </div>
                   <span className="shrink-0 rounded-md bg-muted px-2.5 py-1 text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                    {log.type.replace(/_/g, " ")}
+                    {formatLogTypeLabel(t, log.type)}
                   </span>
                 </div>
               ))}
             </div>
             <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 px-4 py-3 border-t bg-muted/30">
               <div className="flex items-center gap-2">
-                <span className="text-sm text-muted-foreground whitespace-nowrap">Items per page:</span>
+                <span className="text-sm text-muted-foreground whitespace-nowrap">{t("common.itemsPerPage")}</span>
                 <Select
                   value={String(logPageSize)}
                   onValueChange={(v) => { setLogPageSize(Number(v)); setLogPage(1); }}
@@ -428,16 +445,18 @@ const DeviceDetail: React.FC = () => {
                 </Select>
               </div>
               <p className="text-sm text-muted-foreground">
-                Showing {logStartItem} to {logEndItem} of {logs.length} results
+                {t("common.showingRange", { start: logStartItem, end: logEndItem, total: logs.length })}
               </p>
               {logTotalPages > 1 && (
                 <div className="flex items-center gap-2">
                   <Button variant="outline" size="sm" onClick={() => setLogPage((p) => Math.max(1, p - 1))} disabled={logSafePage <= 1}>
-                    Previous
+                    {t("common.previous")}
                   </Button>
-                  <span className="text-sm text-muted-foreground px-1">Page {logSafePage} of {logTotalPages}</span>
+                  <span className="text-sm text-muted-foreground px-1">
+                    {t("pagination.pageOf", { page: logSafePage, total: logTotalPages })}
+                  </span>
                   <Button variant="outline" size="sm" onClick={() => setLogPage((p) => Math.min(logTotalPages, p + 1))} disabled={logSafePage >= logTotalPages}>
-                    Next
+                    {t("common.next")}
                   </Button>
                 </div>
               )}
@@ -454,23 +473,28 @@ const DeviceDetail: React.FC = () => {
       >
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Unassign device?</AlertDialogTitle>
-            <AlertDialogDescription>
-              Remove this device from{" "}
-              <span className="font-medium text-foreground">
-                {String(device.patientName ?? "").trim() || "the patient"}
-              </span>
-              . Dispensing controls stay disabled until the device is assigned again.
+            <AlertDialogTitle>{t("deviceDetail.unassignTitle")}</AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div>
+                <Trans
+                  i18nKey="deviceDetail.unassignDesc"
+                  values={{
+                    name:
+                      String(device.patientName ?? "").trim() || t("deviceDetail.unassignPatientFallback"),
+                  }}
+                  components={[<span className="font-medium text-foreground" key="0" />]}
+                />
+              </div>
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={unassignMutation.isPending}>Cancel</AlertDialogCancel>
+            <AlertDialogCancel disabled={unassignMutation.isPending}>{t("common.cancel")}</AlertDialogCancel>
             <Button
               variant="destructive"
               disabled={unassignMutation.isPending}
               onClick={() => unassignMutation.mutate(String(device.id))}
             >
-              {unassignMutation.isPending ? "Unassigning…" : "Unassign"}
+              {unassignMutation.isPending ? t("common.unassigning") : t("common.unassign")}
             </Button>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -480,16 +504,23 @@ const DeviceDetail: React.FC = () => {
       <Dialog open={showStopDialog} onOpenChange={setShowStopDialog}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Stop Dispensing</DialogTitle>
+            <DialogTitle>{t("deviceDetail.stopTitle")}</DialogTitle>
             <DialogDescription>
-              Are you sure you want to stop dispensing for device {device.id}
-              {String(device.patientName ?? "").trim() ? ` (${device.patientName})` : ""}? The patient will not
-              receive medication until dispensing is resumed.
+              {t("deviceDetail.stopDesc", {
+                id: device.id,
+                patient: String(device.patientName ?? "").trim()
+                  ? t("deviceDetail.stopPatientPart", { name: device.patientName })
+                  : "",
+              })}
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setShowStopDialog(false)}>Cancel</Button>
-            <Button variant="destructive" onClick={handleStopDispensing}>Confirm Stop</Button>
+            <Button variant="outline" onClick={() => setShowStopDialog(false)}>
+              {t("common.cancel")}
+            </Button>
+            <Button variant="destructive" onClick={handleStopDispensing}>
+              {t("deviceDetail.confirmStop")}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

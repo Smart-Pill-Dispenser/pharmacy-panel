@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { useParams, useNavigate, useLocation } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import { ArrowLeft, Users, Mail, Phone, Monitor, Building2, CalendarClock } from "lucide-react";
 import type { Caregiver } from "@/data/mockData";
 import StatusBadge from "@/components/StatusBadge";
@@ -12,6 +13,7 @@ import { caregiverFromApiRow, formatCaregiverDateTime } from "@/lib/caregiverFro
 import LoadingCard from "@/components/LoadingCard";
 
 const CaregiverDetail: React.FC = () => {
+  const { t } = useTranslation();
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const location = useLocation();
@@ -44,24 +46,24 @@ const CaregiverDetail: React.FC = () => {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["pharmacy", "caregivers", id] });
-      toast.success("Caregiver status updated");
+      toast.success(t("caregiverDetail.statusUpdated"));
     },
     onError: (e: any) => {
-      toast.error(e?.message ?? "Failed to update caregiver status");
+      toast.error(e?.message ?? t("caregiverDetail.statusFailed"));
       queryClient.invalidateQueries({ queryKey: ["pharmacy", "caregivers", id] });
     },
   });
 
   if (isLoading) {
-    return <LoadingCard message="Loading caregiver…" />;
+    return <LoadingCard message={t("caregiverDetail.loading")} />;
   }
 
   if (!caregiver && isError) {
     return (
       <div className="flex flex-col items-center justify-center py-20">
-        <p className="text-destructive mb-4">Failed to load caregiver.</p>
+        <p className="text-destructive mb-4">{t("caregiverDetail.loadFailed")}</p>
         <Button variant="outline" onClick={() => navigate("/caregivers")}>
-          Back to Caregivers
+          {t("caregiverDetail.backToList")}
         </Button>
       </div>
     );
@@ -70,13 +72,14 @@ const CaregiverDetail: React.FC = () => {
   if (!caregiver) {
     return (
       <div className="flex flex-col items-center justify-center py-20">
-        <p className="text-muted-foreground mb-4">Caregiver not found</p>
+        <p className="text-muted-foreground mb-4">{t("caregiverDetail.notFound")}</p>
         <Button variant="outline" onClick={() => navigate("/caregivers")}>
-          Back to Caregivers
+          {t("caregiverDetail.backToList")}
         </Button>
       </div>
     );
   }
+  const dash = t("common.dash");
 
   const setStatus = (status: "active" | "inactive") => {
     updateCaregiverStatus.mutate({ isActive: status === "active" });
@@ -89,7 +92,7 @@ const CaregiverDetail: React.FC = () => {
         onClick={() => navigate("/caregivers")}
         className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
       >
-        <ArrowLeft className="h-4 w-4" /> Back
+        <ArrowLeft className="h-4 w-4" /> {t("common.back")}
       </button>
 
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -101,7 +104,7 @@ const CaregiverDetail: React.FC = () => {
             <h1 className="text-2xl font-bold text-foreground">{caregiver.name}</h1>
             <p className="text-sm text-muted-foreground">{caregiver.email}</p>
             <p className="text-xs text-muted-foreground mt-1">
-              Caregiver ID: <span className="font-mono">{caregiver.id}</span>
+              {t("caregiverDetail.caregiverId")} <span className="font-mono">{caregiver.id}</span>
             </p>
           </div>
         </div>
@@ -112,7 +115,7 @@ const CaregiverDetail: React.FC = () => {
         <div className="rounded-xl border bg-card p-4 shadow-card">
           <div className="flex items-center gap-2 mb-2">
             <Mail className="h-4 w-4 text-muted-foreground" />
-            <span className="text-sm text-muted-foreground">Email</span>
+            <span className="text-sm text-muted-foreground">{t("caregiverDetail.email")}</span>
           </div>
           <p className="text-sm font-medium text-card-foreground">{caregiver.email}</p>
         </div>
@@ -120,26 +123,26 @@ const CaregiverDetail: React.FC = () => {
         <div className="rounded-xl border bg-card p-4 shadow-card">
           <div className="flex items-center gap-2 mb-2">
             <Phone className="h-4 w-4 text-muted-foreground" />
-            <span className="text-sm text-muted-foreground">Phone</span>
+            <span className="text-sm text-muted-foreground">{t("caregiverDetail.phone")}</span>
           </div>
-          <p className="text-sm font-medium text-card-foreground">{caregiver.phone || "—"}</p>
+          <p className="text-sm font-medium text-card-foreground">{caregiver.phone || dash}</p>
         </div>
 
         <div className="rounded-xl border bg-card p-4 shadow-card">
           <div className="flex items-center gap-2 mb-2">
             <Monitor className="h-4 w-4 text-muted-foreground" />
-            <span className="text-sm text-muted-foreground">Linked devices</span>
+            <span className="text-sm text-muted-foreground">{t("caregiverDetail.linkedDevices")}</span>
           </div>
           <p className="text-sm font-medium text-card-foreground">
             {caregiver.linkedDevices.length > 0
               ? caregiver.linkedDevices.join(", ")
-              : "None"}
+              : t("common.none")}
           </p>
         </div>
 
         <div className="rounded-xl border bg-card p-4 shadow-card">
           <div className="flex items-center gap-2 mb-2">
-            <span className="text-sm text-muted-foreground">Status</span>
+            <span className="text-sm text-muted-foreground">{t("common.status")}</span>
           </div>
           <StatusBadge status={caregiver.status} />
         </div>
@@ -149,23 +152,23 @@ const CaregiverDetail: React.FC = () => {
         <div className="rounded-xl border bg-card p-4 shadow-card">
           <div className="flex items-center gap-2 mb-2">
             <Building2 className="h-4 w-4 text-muted-foreground" />
-            <span className="text-sm text-muted-foreground">Organization</span>
+            <span className="text-sm text-muted-foreground">{t("caregiverDetail.organization")}</span>
           </div>
           <p className="text-sm font-medium text-card-foreground font-mono break-all">
-            {caregiver.organizationId?.trim() || "—"}
+            {caregiver.organizationId?.trim() || dash}
           </p>
         </div>
         <div className="rounded-xl border bg-card p-4 shadow-card">
           <div className="flex items-center gap-2 mb-2">
             <CalendarClock className="h-4 w-4 text-muted-foreground" />
-            <span className="text-sm text-muted-foreground">Record created</span>
+            <span className="text-sm text-muted-foreground">{t("caregiverDetail.recordCreated")}</span>
           </div>
           <p className="text-sm font-medium text-card-foreground">{formatCaregiverDateTime(caregiver.createdAt)}</p>
         </div>
         <div className="rounded-xl border bg-card p-4 shadow-card">
           <div className="flex items-center gap-2 mb-2">
             <CalendarClock className="h-4 w-4 text-muted-foreground" />
-            <span className="text-sm text-muted-foreground">Last updated</span>
+            <span className="text-sm text-muted-foreground">{t("caregiverDetail.lastUpdated")}</span>
           </div>
           <p className="text-sm font-medium text-card-foreground">{formatCaregiverDateTime(caregiver.updatedAt)}</p>
         </div>
@@ -173,13 +176,13 @@ const CaregiverDetail: React.FC = () => {
 
       <div className="rounded-xl border bg-card shadow-card">
         <div className="border-b p-4">
-          <h2 className="font-semibold text-card-foreground">Access</h2>
+          <h2 className="font-semibold text-card-foreground">{t("caregiverDetail.accessTitle")}</h2>
           <p className="text-sm text-muted-foreground mt-1">
-            Enable or disable this caregiver&apos;s access to the system.
+            {t("caregiverDetail.accessHint")}
           </p>
         </div>
         <div className="p-4 flex items-center justify-between">
-          <span className="text-sm text-muted-foreground">Account status</span>
+          <span className="text-sm text-muted-foreground">{t("caregiverDetail.accountStatus")}</span>
           <Switch
             checked={caregiver.status === "active"}
             onCheckedChange={(checked) => setStatus(checked ? "active" : "inactive")}

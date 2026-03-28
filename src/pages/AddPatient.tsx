@@ -1,5 +1,6 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
+import { Trans, useTranslation } from "react-i18next";
 import {
   ArrowLeft,
   User,
@@ -41,13 +42,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-
-const STEPS = [
-  { id: 1, title: "Basic information", icon: User },
-  { id: 2, title: "Medication schedule", icon: Pill },
-  { id: 3, title: "Prescription", icon: FileText },
-  { id: 4, title: "Assign device", icon: Monitor },
-];
 
 /** Inclusive list of YYYY-MM-DD between start and end (local calendar). */
 function datesInRange(start: string, end: string): string[] {
@@ -196,7 +190,10 @@ function scheduleComplete(m: ScheduledMedicationForm): boolean {
   return days.every((d) => (m.byDate[d] ?? []).some((t) => t.trim() !== ""));
 }
 
-function toPatientMedication(m: ScheduledMedicationForm): PatientMedication {
+function toPatientMedication(
+  m: ScheduledMedicationForm,
+  tr: (key: string, opts?: Record<string, unknown>) => string
+): PatientMedication {
   const days = datesInRange(m.scheduleStart, m.scheduleEnd);
   const byDate: Record<string, string[]> = {};
   for (const d of days) {
@@ -209,7 +206,12 @@ function toPatientMedication(m: ScheduledMedicationForm): PatientMedication {
     name: m.name.trim(),
     dosage: m.dosage.trim(),
     instructions: m.instructions.trim() || undefined,
-    frequency: `${m.scheduleStart} → ${m.scheduleEnd} · ${days.length} day(s) · ${totalSlots} dispense(s)`,
+    frequency: tr("addPatient.freqSummary", {
+      start: m.scheduleStart,
+      end: m.scheduleEnd,
+      days: days.length,
+      slots: totalSlots,
+    }),
     ...(maxPouches != null ? { maxPouches } : {}),
     schedule: {
       startDate: m.scheduleStart,
@@ -329,6 +331,7 @@ function SingleMedicationScheduleFields({
   removeDateTime,
   relaxScheduleDateLimits = false,
 }: ScheduleHandlers & { relaxScheduleDateLimits?: boolean }) {
+  const { t } = useTranslation();
   const todayMin = todayIsoDateLocal();
   const rangeOk = datesValid(med.scheduleStart, med.scheduleEnd);
   const days = rangeOk ? datesInRange(med.scheduleStart, med.scheduleEnd) : [];
@@ -342,70 +345,69 @@ function SingleMedicationScheduleFields({
       <div className="h-1 w-full gradient-primary" aria-hidden />
       <div className="space-y-6 p-4 sm:p-6">
         <div className="space-y-1">
-          <h2 className="text-lg font-semibold tracking-tight text-foreground">Medication schedule</h2>
+          <h2 className="text-lg font-semibold tracking-tight text-foreground">{t("addPatient.schedule.sectionTitle")}</h2>
           <p className="text-sm text-muted-foreground">
-            Add drug details, pick the regimen window, then choose how dispense times apply across those days.
+            {t("addPatient.schedule.sectionIntro")}
           </p>
         </div>
 
         <div className="space-y-3 rounded-xl border border-border/60 bg-gradient-to-b from-muted/35 via-card to-card p-4 shadow-sm sm:p-5">
-          <IconHeading icon={Pill} title="Medicine information" />
+          <IconHeading icon={Pill} title={t("addPatient.schedule.medicineInfo")} />
           <div className="grid gap-3 sm:grid-cols-2">
             <div className="space-y-1.5">
-              <Label>Medication name *</Label>
+              <Label>{t("addPatient.schedule.medName")}</Label>
               <Input
                 value={med.name}
                 onChange={(e) => updateMedication({ name: e.target.value })}
-                placeholder="e.g. Metformin"
+                placeholder={t("addPatient.schedule.medNamePh")}
                 className="border-border/80 bg-background shadow-sm"
               />
             </div>
             <div className="space-y-1.5">
-              <Label>Dosage</Label>
+              <Label>{t("addPatient.schedule.dosage")}</Label>
               <Input
                 value={med.dosage}
                 onChange={(e) => updateMedication({ dosage: e.target.value })}
-                placeholder="e.g. 500mg"
+                placeholder={t("addPatient.schedule.dosagePh")}
                 className="border-border/80 bg-background shadow-sm"
               />
             </div>
             <div className="space-y-1.5 sm:col-span-2">
-              <Label>Instructions (optional)</Label>
+              <Label>{t("addPatient.schedule.instructions")}</Label>
               <Textarea
                 value={med.instructions}
                 onChange={(e) => updateMedication({ instructions: e.target.value })}
-                placeholder="e.g. Take with food"
+                placeholder={t("addPatient.schedule.instructionsPh")}
                 rows={2}
                 className="resize-none min-h-[72px] border-border/80 bg-background shadow-sm"
               />
             </div>
             <div className="space-y-1.5">
-              <Label>Max pouches (dispenser capacity)</Label>
+              <Label>{t("addPatient.schedule.maxPouches")}</Label>
               <Input
                 type="number"
                 inputMode="numeric"
                 min={1}
                 value={med.maxPouches}
                 onChange={(e) => updateMedication({ maxPouches: e.target.value.replace(/[^\d]/g, "") })}
-                placeholder="e.g. 28"
+                placeholder={t("addPatient.schedule.maxPouchesPh")}
                 className="border-border/80 bg-background shadow-sm"
               />
               <p className="text-xs text-muted-foreground">
-                Shown on the patient tablet as total pouches (e.g. 12 / 28). Optional if the device already
-                defines capacity.
+                {t("addPatient.schedule.maxPouchesHint")}
               </p>
             </div>
           </div>
         </div>
 
         <div className="space-y-3 rounded-xl border border-border/60 bg-gradient-to-b from-muted/35 via-card to-card p-4 shadow-sm sm:p-5">
-          <IconHeading icon={Calendar} title="Schedule period" />
+          <IconHeading icon={Calendar} title={t("addPatient.schedule.periodTitle")} />
           <p className="text-xs text-muted-foreground">
-            Choose the first and last calendar day of this regimen. All days in between appear below.
+            {t("addPatient.schedule.periodHint")}
           </p>
           <div className="grid gap-3 sm:grid-cols-2">
             <div className="space-y-1.5">
-              <Label htmlFor="sched-start-med">Start date *</Label>
+              <Label htmlFor="sched-start-med">{t("addPatient.schedule.startDate")}</Label>
               <DateInput
                 id="sched-start-med"
                 className="pr-9 min-w-0 border-border/80 bg-background shadow-sm"
@@ -415,7 +417,7 @@ function SingleMedicationScheduleFields({
               />
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="sched-end-med">End date *</Label>
+              <Label htmlFor="sched-end-med">{t("addPatient.schedule.endDate")}</Label>
               <DateInput
                 id="sched-end-med"
                 className="pr-9 min-w-0 border-border/80 bg-background shadow-sm"
@@ -428,10 +430,15 @@ function SingleMedicationScheduleFields({
         </div>
 
         <div className="space-y-4 rounded-xl border border-border/60 bg-muted/25 p-4 shadow-sm sm:p-5">
-          <IconHeading icon={Clock} title="Dispense times" />
+          <IconHeading icon={Clock} title={t("addPatient.schedule.dispenseTimesTitle")} />
           <p className="text-xs text-muted-foreground">
-            Pick a mode. <span className="font-medium text-primary">Same schedule</span> repeats one pattern;
-            <span className="font-medium text-info"> custom</span> sets times per calendar day.
+            <Trans
+              i18nKey="addPatient.schedule.dispenseTimesHintRich"
+              components={[
+                <span className="font-medium text-primary" key="0" />,
+                <span className="font-medium text-info" key="1" />,
+              ]}
+            />
           </p>
           <div className="grid gap-3 sm:grid-cols-2">
             <button
@@ -462,9 +469,9 @@ function SingleMedicationScheduleFields({
                   <Repeat className="h-5 w-5" />
                 </span>
                 <div className="min-w-0 flex-1 pt-0.5">
-                  <div className="font-semibold text-foreground">Same schedule</div>
+                  <div className="font-semibold text-foreground">{t("addPatient.schedule.sameSchedule")}</div>
                   <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-                    One list of times — applied to every day in your date range.
+                    {t("addPatient.schedule.sameScheduleDesc")}
                   </p>
                 </div>
               </div>
@@ -497,9 +504,9 @@ function SingleMedicationScheduleFields({
                   <CalendarDays className="h-5 w-5" />
                 </span>
                 <div className="min-w-0 flex-1 pt-0.5">
-                  <div className="font-semibold text-foreground">Custom schedule</div>
+                  <div className="font-semibold text-foreground">{t("addPatient.schedule.customSchedule")}</div>
                   <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-                    Set different dispense times for each date in the list below.
+                    {t("addPatient.schedule.customScheduleDesc")}
                   </p>
                 </div>
               </div>
@@ -509,12 +516,12 @@ function SingleMedicationScheduleFields({
 
         {med.scheduleMode === "same" && (
           <div className="space-y-3 rounded-xl border border-border/60 bg-primary/[0.05] p-4 shadow-sm sm:p-5">
-            <IconHeading icon={Clock} title="Default dispense times (24h)" />
+            <IconHeading icon={Clock} title={t("addPatient.schedule.defaultTimesTitle")} />
             <p className="text-xs text-muted-foreground">
-              These times apply to every day in range and stay in sync automatically — no extra action needed.
+              {t("addPatient.schedule.defaultTimesHint")}
             </p>
             <div className="space-y-2 rounded-lg bg-muted/40 p-3 sm:p-4">
-              <Label className="text-xs font-medium text-primary">Template times</Label>
+              <Label className="text-xs font-medium text-primary">{t("addPatient.schedule.templateTimes")}</Label>
               <ul className="space-y-2">
                 {med.defaultTimesTemplate.map((t, ti) => (
                   <li key={ti} className="flex items-center gap-2">
@@ -530,7 +537,7 @@ function SingleMedicationScheduleFields({
                       size="icon"
                       className="h-9 w-9 shrink-0 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
                       onClick={() => removeTemplateTime(ti)}
-                      aria-label="Remove template time"
+                      aria-label={t("addPatient.schedule.removeTemplateTime")}
                     >
                       <Trash2 className="h-4 w-4" />
                     </Button>
@@ -546,7 +553,7 @@ function SingleMedicationScheduleFields({
                   onClick={addTemplateTime}
                 >
                   <Plus className="h-3.5 w-3.5 mr-1" />
-                  Add time
+                  {t("addPatient.schedule.addTime")}
                 </Button>
               </div>
             </div>
@@ -555,11 +562,11 @@ function SingleMedicationScheduleFields({
 
         {med.scheduleMode === "custom" && (
           <div className="space-y-3 rounded-xl border border-border/60 bg-info/[0.04] p-4 shadow-sm sm:p-5">
-            <IconHeading icon={CalendarDays} title="Calendar — exact dispense per date" tone="info" />
+            <IconHeading icon={CalendarDays} title={t("addPatient.schedule.calendarTitle")} tone="info" />
             {!rangeOk ? (
-              <p className="text-sm text-muted-foreground">Set a valid start and end date to see all days.</p>
+              <p className="text-sm text-muted-foreground">{t("addPatient.schedule.setValidRange")}</p>
             ) : days.length === 0 ? (
-              <p className="text-sm text-muted-foreground">No days in range.</p>
+              <p className="text-sm text-muted-foreground">{t("addPatient.schedule.noDaysInRange")}</p>
             ) : (
               <div className="max-h-[min(420px,50vh)] overflow-y-auto rounded-lg border border-border/60 bg-card divide-y divide-border/60">
                 {days.map((date) => {
@@ -575,20 +582,20 @@ function SingleMedicationScheduleFields({
                         </div>
                         {normalized.length === 0 ? (
                           <span className="text-[10px] uppercase tracking-wide font-medium text-destructive bg-destructive/10 px-2 py-0.5 rounded-full">
-                            No times
+                            {t("addPatient.schedule.noTimesBadge")}
                           </span>
                         ) : matchesTemplate ? (
                           <span className="text-[10px] uppercase tracking-wide text-muted-foreground bg-muted px-2 py-0.5 rounded-full">
-                            Same as template
+                            {t("addPatient.schedule.sameAsTemplateBadge")}
                           </span>
                         ) : (
                           <span className="text-[10px] uppercase tracking-wide font-medium text-primary bg-primary/10 px-2 py-0.5 rounded-full">
-                            Custom times
+                            {t("addPatient.schedule.customTimesBadge")}
                           </span>
                         )}
                       </div>
                       {times.length === 0 ? (
-                        <p className="text-xs text-destructive">Add at least one dispense time for this date.</p>
+                        <p className="text-xs text-destructive">{t("addPatient.schedule.addTimeForDate")}</p>
                       ) : (
                         <ul className="space-y-2">
                           {times.map((t, ti) => (
@@ -605,7 +612,7 @@ function SingleMedicationScheduleFields({
                                 size="icon"
                                 className="h-9 w-9 shrink-0 text-muted-foreground hover:text-destructive"
                                 onClick={() => removeDateTime(date, ti)}
-                                aria-label="Remove dispense time"
+                                aria-label={t("addPatient.schedule.removeDispenseTime")}
                               >
                                 <Trash2 className="h-4 w-4" />
                               </Button>
@@ -621,7 +628,7 @@ function SingleMedicationScheduleFields({
                         onClick={() => addDateTime(date)}
                       >
                         <Plus className="h-3.5 w-3.5 mr-1" />
-                        Add dispense time
+                        {t("addPatient.schedule.addDispenseTime")}
                       </Button>
                     </div>
                   );
@@ -636,6 +643,7 @@ function SingleMedicationScheduleFields({
 }
 
 const AddPatient: React.FC = () => {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const { id: editPatientId } = useParams<{ id: string }>();
   const isEditMode = typeof editPatientId === "string" && editPatientId.length > 0;
@@ -670,6 +678,16 @@ const AddPatient: React.FC = () => {
     email: string;
     password: string;
   } | null>(null);
+
+  const steps = useMemo(
+    () => [
+      { id: 1, title: t("addPatient.step1"), icon: User },
+      { id: 2, title: t("addPatient.step2"), icon: Pill },
+      { id: 3, title: t("addPatient.step3"), icon: FileText },
+      { id: 4, title: t("addPatient.step4"), icon: Monitor },
+    ],
+    [t]
+  );
 
   const {
     data: patientResp,
@@ -876,7 +894,7 @@ const AddPatient: React.FC = () => {
     const ok =
       name.endsWith(".pdf") || name.endsWith(".jpg") || name.endsWith(".jpeg") || name.endsWith(".png");
     if (!ok) {
-      toast.error("Use a PDF or image (JPG, PNG).");
+      toast.error(t("addPatient.prescriptionFileWrongType"));
       return;
     }
     setPrescriptionFileName(file.name);
@@ -912,11 +930,11 @@ const AddPatient: React.FC = () => {
   const confirmDeviceValidity = () => {
     const v = validityDialogDate.trim();
     if (!v) {
-      toast.error("Choose a validity date.");
+      toast.error(t("addPatient.errValidityRequired"));
       return;
     }
     if (v < todayIsoDateLocal()) {
-      toast.error("Validity date cannot be in the past.");
+      toast.error(t("addPatient.errValidityPast"));
       return;
     }
     const dev = devicesForAssignStepBase.find((d) => d.id === pendingAssignDeviceId);
@@ -960,7 +978,7 @@ const AddPatient: React.FC = () => {
 
   const handleSubmit = async () => {
     setSubmitting(true);
-    const validMeds = [toPatientMedication(medication)];
+    const validMeds = [toPatientMedication(medication, t)];
     try {
       if (isEditMode && editPatientId) {
         const pExisting = patientResp as Record<string, unknown> | null | undefined;
@@ -989,7 +1007,7 @@ const AddPatient: React.FC = () => {
           });
         }
 
-        toast.success("Patient updated");
+        toast.success(t("patients.updatedToast"));
         await queryClient.invalidateQueries({ queryKey: ["pharmacy", "patients"] });
         await queryClient.invalidateQueries({ queryKey: ["pharmacy", "patients", editPatientId] });
         await queryClient.invalidateQueries({ queryKey: ["pharmacy", "devices"] });
@@ -1052,8 +1070,11 @@ const AddPatient: React.FC = () => {
       }
 
       addPatient(patient);
-      toast.success("Patient added", {
-        description: `${patient.fullName} has been added and device ${patient.assignedDeviceId ?? "—"} assigned.`,
+      toast.success(t("patients.addToast"), {
+        description: t("patients.addToastDesc", {
+          name: patient.fullName,
+          device: patient.assignedDeviceId ?? t("common.dash"),
+        }),
       });
 
       queryClient.invalidateQueries({ queryKey: ["pharmacy", "devices"] });
@@ -1065,15 +1086,14 @@ const AddPatient: React.FC = () => {
         setPatientTabletCredentials({ email: email.trim(), password: tabletPassword });
       } else {
         if (tabletLoginConfigured === false) {
-          toast.message("Patient tablet login", {
-            description:
-              "Patient Cognito app client is not set on the API — share credentials another way or configure CognitoPatientClientId.",
+          toast.message(t("patients.tabletLoginTitle"), {
+            description: t("patients.tabletLoginDesc"),
           });
         }
         navigate("/patients");
       }
     } catch (e: any) {
-      toast.error(e?.message ?? (isEditMode ? "Failed to update patient" : "Failed to add patient"));
+      toast.error(e?.message ?? (isEditMode ? t("patients.updateFailed") : t("patients.addFailed")));
     } finally {
       setSubmitting(false);
     }
@@ -1081,14 +1101,14 @@ const AddPatient: React.FC = () => {
 
   if (isEditMode) {
     if (patientLoading) {
-      return <LoadingCard message="Loading patient…" />;
+      return <LoadingCard message={t("addPatient.loadingPatient")} />;
     }
     if (patientError || !patientResp) {
       return (
         <div className="flex flex-col items-center justify-center py-20">
-          <p className="text-muted-foreground mb-4">Could not load this patient.</p>
+          <p className="text-muted-foreground mb-4">{t("addPatient.couldNotLoad")}</p>
           <Button variant="outline" onClick={() => navigate("/patients")}>
-            Back to Patients
+            {t("addPatient.backToPatients")}
           </Button>
         </div>
       );
@@ -1102,17 +1122,15 @@ const AddPatient: React.FC = () => {
           <ArrowLeft className="h-5 w-5" />
         </Button>
         <div>
-          <h1 className="text-2xl font-bold text-foreground">{isEditMode ? "Edit patient" : "Add patient"}</h1>
+          <h1 className="text-2xl font-bold text-foreground">{isEditMode ? t("addPatient.editTitle") : t("addPatient.addTitle")}</h1>
           <p className="text-sm text-muted-foreground mt-1">
-            {isEditMode
-              ? "Update information, medication schedule, prescription, and device assignment"
-              : "Enter basic information, medication schedule, prescription, and assign a device"}
+            {isEditMode ? t("addPatient.editSubtitle") : t("addPatient.addSubtitle")}
           </p>
         </div>
       </div>
 
-      <div className="flex flex-wrap gap-2" role="list" aria-label="Patient steps (use Next to move forward)">
-        {STEPS.map((s) => {
+      <div className="flex flex-wrap gap-2" role="list" aria-label={t("addPatient.stepsAria")}>
+        {steps.map((s) => {
           const Icon = s.icon;
           const active = step === s.id;
           const isPast = s.id < step;
@@ -1127,8 +1145,8 @@ const AddPatient: React.FC = () => {
               onClick={() => {
                 if (active) return;
                 if (isFuture) {
-                  toast.message("Use Next to continue", {
-                    description: "Move forward one step at a time with the Next button below.",
+                  toast.message(t("addPatient.useNextTitle"), {
+                    description: t("addPatient.useNextDesc"),
                   });
                   return;
                 }
@@ -1168,11 +1186,11 @@ const AddPatient: React.FC = () => {
         <div className="space-y-6 p-4 sm:p-6">
           {step !== 2 ? (
             <div className="space-y-1 border-b border-border/70 pb-5">
-              <h2 className="text-lg font-semibold tracking-tight text-foreground">{STEPS[step - 1].title}</h2>
+              <h2 className="text-lg font-semibold tracking-tight text-foreground">{steps[step - 1].title}</h2>
               <p className="text-sm text-muted-foreground">
-                {step === 1 && "Patient demographics and contact details"}
-                {step === 3 && "Prescription details or upload"}
-                {step === 4 && "Assign a device from inventory to this patient"}
+                {step === 1 && t("addPatient.stepHint1")}
+                {step === 3 && t("addPatient.stepHint3")}
+                {step === 4 && t("addPatient.stepHint4")}
               </p>
             </div>
           ) : null}
@@ -1181,53 +1199,53 @@ const AddPatient: React.FC = () => {
             {step === 1 && (
               <>
                 <div className="space-y-3 rounded-xl border border-border/80 bg-gradient-to-b from-muted/40 via-card to-card p-4 shadow-sm sm:p-5">
-                  <IconHeading icon={User} title="Identity & contact" />
+                  <IconHeading icon={User} title={t("addPatient.identityTitle")} />
                   <p className="text-xs text-muted-foreground">
-                    Legal name and phone are required. Email is optional but helps with reminders.
+                    {t("addPatient.identityHint")}
                   </p>
                   <div className="grid gap-4 sm:grid-cols-2">
                     <div className="space-y-2">
-                      <Label htmlFor="fullName">Full name *</Label>
+                      <Label htmlFor="fullName">{t("addPatient.fullName")}</Label>
                       <Input
                         id="fullName"
                         value={fullName}
                         onChange={(e) => setFullName(e.target.value)}
-                        placeholder="e.g. John Smith"
+                        placeholder={t("addPatient.placeholderFullName")}
                         className="border-border/90 bg-background/80 shadow-sm transition-shadow focus-visible:shadow-md"
                       />
                     </div>
                     <div className="space-y-2">
-                      <Label htmlFor="phone">Phone *</Label>
+                      <Label htmlFor="phone">{t("addPatient.phoneReq")}</Label>
                       <Input
                         id="phone"
                         type="tel"
                         value={phone}
                         onChange={(e) => setPhone(e.target.value)}
-                        placeholder="e.g. +1 555 0100"
+                        placeholder={t("addPatient.placeholderPhone")}
                         className="border-border/90 bg-background/80 shadow-sm transition-shadow focus-visible:shadow-md"
                       />
                     </div>
                     <div className="space-y-2 sm:col-span-2">
-                      <Label htmlFor="email">Email</Label>
+                      <Label htmlFor="email">{t("addPatient.emailLabel")}</Label>
                       <Input
                         id="email"
                         type="email"
                         value={email}
                         onChange={(e) => setEmail(e.target.value)}
-                        placeholder="patient@example.com"
+                        placeholder={t("addPatient.placeholderEmail")}
                         className="border-border/90 bg-background/80 shadow-sm transition-shadow focus-visible:shadow-md"
                       />
                     </div>
                   </div>
                 </div>
                 <div className="space-y-3 rounded-xl border border-border/80 bg-gradient-to-b from-muted/40 via-card to-card p-4 shadow-sm sm:p-5">
-                  <IconHeading icon={MapPin} title="Birth date & address" />
+                  <IconHeading icon={MapPin} title={t("addPatient.birthAddressTitle")} />
                   <p className="text-xs text-muted-foreground">
-                    Optional fields — still useful for records and device logistics.
+                    {t("addPatient.birthAddressHint")}
                   </p>
                   <div className="grid gap-4 sm:grid-cols-2">
                     <div className="space-y-2">
-                      <Label htmlFor="dateOfBirth">Date of birth</Label>
+                      <Label htmlFor="dateOfBirth">{t("addPatient.dateOfBirth")}</Label>
                       <DateInput
                         id="dateOfBirth"
                         className="pr-9 min-w-0 border-border/90 bg-background/80 shadow-sm transition-shadow focus-visible:shadow-md"
@@ -1236,12 +1254,12 @@ const AddPatient: React.FC = () => {
                       />
                     </div>
                     <div className="space-y-2">
-                      <Label htmlFor="address">Address</Label>
+                      <Label htmlFor="address">{t("addPatient.address")}</Label>
                       <Input
                         id="address"
                         value={address}
                         onChange={(e) => setAddress(e.target.value)}
-                        placeholder="Street, city, postal code"
+                        placeholder={t("addPatient.placeholderAddress")}
                         className="border-border/90 bg-background/80 shadow-sm transition-shadow focus-visible:shadow-md"
                       />
                     </div>
@@ -1269,17 +1287,17 @@ const AddPatient: React.FC = () => {
             {step === 3 && (
               <>
                 <div className="space-y-3 rounded-xl border border-border/80 bg-gradient-to-b from-muted/40 via-card to-card p-4 shadow-sm sm:p-5">
-                  <IconHeading icon={FileText} title="Prescription notes" />
+                  <IconHeading icon={FileText} title={t("addPatient.prescriptionNotesTitle")} />
                   <p className="text-xs text-muted-foreground">
-                    Free-text details: medication list, prescriber, validity, or special instructions.
+                    {t("addPatient.prescriptionNotesHint")}
                   </p>
                   <div className="space-y-2">
-                    <Label htmlFor="prescriptionNotes">Notes</Label>
+                    <Label htmlFor="prescriptionNotes">{t("common.notes")}</Label>
                     <Textarea
                       id="prescriptionNotes"
                       value={prescriptionNotes}
                       onChange={(e) => setPrescriptionNotes(e.target.value)}
-                      placeholder="Enter prescription details, doctor notes, validity period, etc."
+                      placeholder={t("addPatient.prescriptionNotesPlaceholder")}
                       rows={5}
                       className="resize-none border-border/90 bg-background/80 shadow-sm transition-shadow focus-visible:shadow-md"
                     />
@@ -1287,10 +1305,9 @@ const AddPatient: React.FC = () => {
                 </div>
 
                 <div className="space-y-3 rounded-xl border-2 border-info/25 bg-gradient-to-br from-info/[0.06] via-card to-card p-4 shadow-md sm:p-5">
-                  <IconHeading icon={Upload} title="Prescription document" tone="info" />
+                  <IconHeading icon={Upload} title={t("addPatient.prescriptionDocTitle")} tone="info" />
                   <p className="text-sm text-muted-foreground">
-                    Optional attachment — PDF or image (JPG, PNG). File name is saved with the patient for your
-                    records.
+                    {t("addPatient.prescriptionDocHint")}
                   </p>
 
                   <input
@@ -1312,8 +1329,8 @@ const AddPatient: React.FC = () => {
                     tabIndex={0}
                     aria-label={
                       prescriptionFileName
-                        ? `File selected: ${prescriptionFileName}. Click to replace.`
-                        : "Upload prescription document. Drop a file or click to browse."
+                        ? t("addPatient.ariaFileSelected", { name: prescriptionFileName })
+                        : t("addPatient.ariaUpload")
                     }
                     className={cn(
                       "rounded-xl border-2 border-dashed transition-all outline-none",
@@ -1364,14 +1381,14 @@ const AddPatient: React.FC = () => {
                         </div>
                         <div className="flex-1 min-w-0 text-left space-y-1">
                           <p className="text-sm font-semibold text-foreground break-all">{prescriptionFileName}</p>
-                          <p className="text-sm text-muted-foreground">Ready to save · Click or drop to replace</p>
+                          <p className="text-sm text-muted-foreground">{t("addPatient.readyToSave")}</p>
                         </div>
                         <Button
                           type="button"
                           variant="outline"
                           size="icon"
                           className="shrink-0 rounded-full border-destructive/30 text-destructive hover:bg-destructive/10 hover:text-destructive"
-                          aria-label="Remove file"
+                          aria-label={t("addPatient.removeFile")}
                           onClick={clearPrescriptionFile}
                         >
                           <X className="h-4 w-4" />
@@ -1388,10 +1405,10 @@ const AddPatient: React.FC = () => {
                           <Upload className="h-7 w-7 text-info" aria-hidden />
                         </div>
                         <p className="text-base font-medium text-foreground pt-2">
-                          {prescriptionDragActive ? "Drop file to attach" : "Drag & drop or browse"}
+                          {prescriptionDragActive ? t("addPatient.dropFile") : t("addPatient.dragDropBrowse")}
                         </p>
                         <p className="text-sm text-muted-foreground max-w-md">
-                          PDF, JPG, or PNG · one file · stored as reference with this patient
+                          {t("addPatient.fileTypesHint")}
                         </p>
                         <Button
                           type="button"
@@ -1403,7 +1420,7 @@ const AddPatient: React.FC = () => {
                             openPrescriptionFilePicker();
                           }}
                         >
-                          Choose file
+                          {t("addPatient.chooseFile")}
                         </Button>
                       </>
                     )}
@@ -1414,22 +1431,20 @@ const AddPatient: React.FC = () => {
 
             {step === 4 && (
               <div className="space-y-4 rounded-xl border-2 border-primary/25 bg-gradient-to-br from-primary/[0.06] via-card to-card p-4 shadow-md sm:p-5">
-                <IconHeading icon={Monitor} title="Device assignment" />
+                <IconHeading icon={Monitor} title={t("addPatient.deviceAssignmentTitle")} />
                 <p className="text-sm text-muted-foreground">
-                  {isEditMode
-                    ? "Keep the current device or choose another from inventory. The selection is saved when you finish."
-                    : "Select a device from inventory for this patient. It will be linked when you finish this step."}
+                  {isEditMode ? t("addPatient.deviceAssignmentEdit") : t("addPatient.deviceAssignmentAdd")}
                 </p>
                 {unassignedLoading ? (
-                  <LoadingCard message="Loading unassigned devices…" />
+                  <LoadingCard message={t("addPatient.loadingUnassigned")} />
                 ) : devicesForAssignStepBase.length === 0 ? (
                   <div className="rounded-xl border-2 border-dashed border-warning/40 bg-warning/5 p-8 text-center shadow-sm">
                     <span className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-warning/15">
                       <Cpu className="h-6 w-6 text-warning" />
                     </span>
-                    <p className="mt-4 text-sm font-semibold text-foreground">No unassigned devices</p>
+                    <p className="mt-4 text-sm font-semibold text-foreground">{t("addPatient.noUnassignedTitle")}</p>
                     <p className="mt-1.5 text-sm text-muted-foreground max-w-md mx-auto">
-                      Add devices to inventory first, then return to assign one to this patient.
+                      {t("addPatient.noUnassignedHint")}
                     </p>
                   </div>
                 ) : (
@@ -1437,11 +1452,11 @@ const AddPatient: React.FC = () => {
                     <div className="relative max-w-md">
                       <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground pointer-events-none" />
                       <Input
-                        placeholder="Search by device id or serial…"
+                        placeholder={t("addPatient.deviceSearchPlaceholder")}
                         value={deviceAssignSearch}
                         onChange={(e) => setDeviceAssignSearch(e.target.value)}
                         className="pl-9 pr-9"
-                        aria-label="Search devices"
+                        aria-label={t("addPatient.searchDevicesAria")}
                       />
                       {deviceAssignSearch.length > 0 ? (
                         <Button
@@ -1450,7 +1465,7 @@ const AddPatient: React.FC = () => {
                           size="icon"
                           className="absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7 text-muted-foreground hover:text-foreground"
                           onClick={() => setDeviceAssignSearch("")}
-                          aria-label="Clear search"
+                          aria-label={t("common.clearSearch")}
                         >
                           <X className="h-4 w-4" />
                         </Button>
@@ -1458,15 +1473,14 @@ const AddPatient: React.FC = () => {
                     </div>
                     {assignedDeviceValidUntil.trim() ? (
                       <p className="text-xs text-muted-foreground">
-                        Assignment valid until{" "}
-                        <span className="font-medium text-foreground">{assignedDeviceValidUntil}</span>
+                        {t("addPatient.assignmentValidUntil", { date: assignedDeviceValidUntil })}
                       </p>
                     ) : null}
                     {devicesForAssignStep.length === 0 ? (
                       <div className="rounded-xl border border-dashed border-border/80 bg-muted/20 py-8 px-4 text-center">
-                        <p className="text-sm font-medium text-foreground">No devices match your search</p>
+                        <p className="text-sm font-medium text-foreground">{t("addPatient.noDeviceSearchTitle")}</p>
                         <p className="mt-1.5 text-sm text-muted-foreground max-w-md mx-auto">
-                          Try another device id or serial, or clear the search to see all available devices.
+                          {t("addPatient.noDeviceSearchHint")}
                         </p>
                       </div>
                     ) : (
@@ -1476,10 +1490,10 @@ const AddPatient: React.FC = () => {
                             <thead className="sticky top-0 z-10 bg-primary/[0.07] shadow-sm">
                               <tr className="border-b border-primary/15">
                                 <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider bg-primary/[0.07]">
-                                  Device ID
+                                  {t("addPatient.colDeviceId")}
                                 </th>
                                 <th className="px-4 py-3 text-right text-xs font-medium text-muted-foreground uppercase tracking-wider w-28 bg-primary/[0.07]">
-                                  Select
+                                  {t("addPatient.colSelect")}
                                 </th>
                               </tr>
                             </thead>
@@ -1521,10 +1535,10 @@ const AddPatient: React.FC = () => {
                                       {selected ? (
                                         <span className="inline-flex items-center gap-1.5 text-sm font-medium text-primary">
                                           <CheckCircle2 className="h-4 w-4 shrink-0" />
-                                          Selected
+                                          {t("addPatient.deviceSelected")}
                                         </span>
                                       ) : (
-                                        <span className="text-sm text-muted-foreground">—</span>
+                                        <span className="text-sm text-muted-foreground">{t("common.dash")}</span>
                                       )}
                                     </td>
                                   </tr>
@@ -1550,11 +1564,11 @@ const AddPatient: React.FC = () => {
                 className="border border-border/90 shadow-sm"
                 onClick={() => setStep(step - 1)}
               >
-                Back
+                {t("common.back")}
               </Button>
             ) : (
               <Button type="button" variant="ghost" className="text-muted-foreground" onClick={() => navigate("/patients")}>
-                Cancel
+                {t("common.cancel")}
               </Button>
             )}
             {step < 4 ? (
@@ -1568,7 +1582,7 @@ const AddPatient: React.FC = () => {
                   (step === 3 && !canProceedStep3)
                 }
               >
-                Next
+                {t("common.next")}
               </Button>
             ) : (
               <Button
@@ -1579,11 +1593,11 @@ const AddPatient: React.FC = () => {
               >
                 {submitting
                   ? isEditMode
-                    ? "Saving…"
-                    : "Adding patient…"
+                    ? t("addPatient.saving")
+                    : t("addPatient.adding")
                   : isEditMode
-                    ? "Save changes"
-                    : "Add patient & assign device"}
+                    ? t("addPatient.saveChanges")
+                    : t("addPatient.submitAdd")}
               </Button>
             )}
           </div>
@@ -1604,20 +1618,19 @@ const AddPatient: React.FC = () => {
           onEscapeKeyDown={(e) => e.preventDefault()}
         >
           <DialogHeader>
-            <DialogTitle>Patient tablet sign-in</DialogTitle>
+            <DialogTitle>{t("addPatient.tabletDialogTitle")}</DialogTitle>
             <DialogDescription>
-              Give the patient or caregiver these details. They sign in on the tablet app; they can change the
-              password afterward in Settings.
+              {t("addPatient.tabletDialogDesc")}
             </DialogDescription>
           </DialogHeader>
           {patientTabletCredentials ? (
             <div className="space-y-3 py-1 text-sm">
               <div>
-                <p className="text-muted-foreground text-xs font-medium uppercase tracking-wide">Email</p>
+                <p className="text-muted-foreground text-xs font-medium uppercase tracking-wide">{t("common.email")}</p>
                 <p className="font-mono text-foreground font-medium break-all">{patientTabletCredentials.email}</p>
               </div>
               <div>
-                <p className="text-muted-foreground text-xs font-medium uppercase tracking-wide">Password</p>
+                <p className="text-muted-foreground text-xs font-medium uppercase tracking-wide">{t("common.password")}</p>
                 <p className="font-mono text-foreground font-semibold tracking-wide select-all break-all">
                   {patientTabletCredentials.password}
                 </p>
@@ -1632,7 +1645,7 @@ const AddPatient: React.FC = () => {
                 navigate("/patients");
               }}
             >
-              Close
+              {t("common.close")}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1647,14 +1660,13 @@ const AddPatient: React.FC = () => {
       >
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Device assignment validity</DialogTitle>
+            <DialogTitle>{t("addPatient.validityDialogTitle")}</DialogTitle>
             <DialogDescription>
-              Choose the last day this device should remain assigned to this patient. You can change it later by
-              editing the patient.
+              {t("addPatient.validityDialogDesc")}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-2 py-2">
-            <Label htmlFor="device-valid-until">Valid until *</Label>
+            <Label htmlFor="device-valid-until">{t("addPatient.validUntilLabel")}</Label>
             <DateInput
               id="device-valid-until"
               className="w-full border-border/90 bg-background/80 shadow-sm"
@@ -1672,10 +1684,10 @@ const AddPatient: React.FC = () => {
                 setPendingAssignDeviceId("");
               }}
             >
-              Cancel
+              {t("common.cancel")}
             </Button>
             <Button type="button" onClick={confirmDeviceValidity}>
-              Confirm assignment
+              {t("addPatient.confirmAssignment")}
             </Button>
           </DialogFooter>
         </DialogContent>

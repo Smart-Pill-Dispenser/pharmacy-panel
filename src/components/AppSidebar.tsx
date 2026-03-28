@@ -1,5 +1,6 @@
-import React from "react";
+import React, { useMemo } from "react";
 import { NavLink, useLocation } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import { useAuth } from "@/contexts/AuthContext";
 import { useLocale, localeLabels, supportedLocales, type AppLocale } from "@/contexts/LocaleContext";
 import {
@@ -24,24 +25,29 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 
-const navItems = [
-  { to: "/", icon: LayoutDashboard, label: "Dashboard" },
-  { to: "/patients", icon: UserPlus, label: "Patients" },
-  { to: "/devices", icon: Monitor, label: "Devices" },
-  { to: "/caregivers", icon: Users, label: "Caregivers" },
-  { to: "/help-support", icon: HelpCircle, label: "Help & Support" },
-  { to: "/logs", icon: BarChart3, label: "Logs & Analytics" },
-];
-
 interface AppSidebarProps {
   collapsed: boolean;
   onToggle: () => void;
 }
 
 const AppSidebar: React.FC<AppSidebarProps> = ({ collapsed, onToggle }) => {
+  const { t } = useTranslation();
   const { user } = useAuth();
   const { locale, setLocale } = useLocale();
   const location = useLocation();
+
+  const navItems = useMemo(
+    () =>
+      [
+        { to: "/", icon: LayoutDashboard, labelKey: "nav.dashboard" as const },
+        { to: "/patients", icon: UserPlus, labelKey: "nav.patients" as const },
+        { to: "/devices", icon: Monitor, labelKey: "nav.devices" as const },
+        { to: "/caregivers", icon: Users, labelKey: "nav.caregivers" as const },
+        { to: "/help-support", icon: HelpCircle, labelKey: "nav.helpSupport" as const },
+        { to: "/logs", icon: BarChart3, labelKey: "nav.logsAnalytics" as const },
+      ].map((item) => ({ ...item, label: t(item.labelKey) })),
+    [t]
+  );
 
   return (
     <aside
@@ -50,23 +56,21 @@ const AppSidebar: React.FC<AppSidebarProps> = ({ collapsed, onToggle }) => {
         collapsed ? "w-[72px]" : "w-[250px]"
       )}
     >
-      {/* Logo */}
       <div className="flex h-16 items-center gap-3 border-b border-sidebar-border px-4">
         <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary">
           <Pill className="h-5 w-5 text-primary-foreground" />
         </div>
         {!collapsed && (
           <span className="text-sm font-semibold text-sidebar-foreground truncate">
-            Navos ZET
+            {t("app.brand")}
           </span>
         )}
       </div>
 
-      {/* Navigation */}
       <nav className="flex-1 space-y-1 overflow-y-auto p-3">
         {navItems.map((item) => {
-          const isActive = location.pathname === item.to || 
-            (item.to !== "/" && location.pathname.startsWith(item.to));
+          const isActive =
+            location.pathname === item.to || (item.to !== "/" && location.pathname.startsWith(item.to));
           return (
             <NavLink
               key={item.to}
@@ -85,14 +89,13 @@ const AppSidebar: React.FC<AppSidebarProps> = ({ collapsed, onToggle }) => {
         })}
       </nav>
 
-      {/* Bottom */}
       <div className="border-t border-sidebar-border p-3 space-y-2">
         {!collapsed && (
           <div className="px-1">
             <Select value={locale} onValueChange={(v) => setLocale(v as AppLocale)}>
               <SelectTrigger className="h-9 bg-sidebar border-sidebar-border text-sidebar-fg">
                 <Languages className="h-4 w-4 shrink-0 mr-2" />
-                <SelectValue placeholder="Language" />
+                <SelectValue placeholder={t("common.language")} />
               </SelectTrigger>
               <SelectContent>
                 {supportedLocales.map((code) => (
@@ -112,7 +115,6 @@ const AppSidebar: React.FC<AppSidebarProps> = ({ collapsed, onToggle }) => {
         )}
       </div>
 
-      {/* Collapse toggle */}
       <Button
         variant="ghost"
         size="icon"

@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useCallback, useEffect } from "react";
+import { syncI18nLanguage } from "@/i18n/index";
 
 export type AppLocale = "en" | "hu" | "sk";
 
@@ -33,7 +34,12 @@ export const LocaleProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   });
 
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEY, locale);
+    try {
+      localStorage.setItem(STORAGE_KEY, locale);
+    } catch {
+      /* ignore */
+    }
+    syncI18nLanguage(locale);
   }, [locale]);
 
   const setLocale = useCallback((value: AppLocale) => {

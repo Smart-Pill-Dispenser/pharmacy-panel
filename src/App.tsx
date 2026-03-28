@@ -8,6 +8,7 @@ import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import { PHARMACY_SESSION_EXPIRED_EVENT } from "@/api/client";
 import { toast } from "sonner";
 import { LocaleProvider } from "@/contexts/LocaleContext";
+import i18n from "@/i18n/index";
 import { PatientsProvider } from "@/contexts/PatientsContext";
 import AppLayout from "@/components/AppLayout";
 import Login from "@/pages/Login";
@@ -37,7 +38,7 @@ function SessionExpiredHandler() {
     const onExpired = () => {
       queryClient.clear();
       logout();
-      toast.message("Session expired", { description: "Please sign in again." });
+      toast.message(i18n.t("app.sessionExpiredTitle"), { description: i18n.t("app.sessionExpiredDesc") });
       navigate("/login", { replace: true });
     };
     window.addEventListener(PHARMACY_SESSION_EXPIRED_EVENT, onExpired);

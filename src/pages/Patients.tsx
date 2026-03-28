@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
+import { Trans, useTranslation } from "react-i18next";
 import { UserPlus, Users, Search, Monitor, Phone, Mail, X, UserMinus, Trash2, Pencil } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -23,6 +24,7 @@ import { toast } from "sonner";
 const PAGE_SIZE_OPTIONS = [5, 10, 25, 50];
 
 const Patients: React.FC = () => {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { patients: addedPatients, removePatient: removeLocalPatient } = usePatients();
@@ -39,11 +41,11 @@ const Patients: React.FC = () => {
       await queryClient.invalidateQueries({ queryKey: ["pharmacy", "devices"] });
       await queryClient.invalidateQueries({ queryKey: ["pharmacy", "devices", "unassigned"] });
       await queryClient.invalidateQueries({ queryKey: ["pharmacy", "dashboard"] });
-      toast.success("Device unassigned from patient");
+      toast.success(t("patients.unassignToast"));
       setUnassignTarget(null);
     },
     onError: (e: Error) => {
-      toast.error(e?.message ?? "Failed to unassign device");
+      toast.error(e?.message ?? t("patients.unassignFailed"));
     },
   });
 
@@ -55,10 +57,10 @@ const Patients: React.FC = () => {
       await queryClient.invalidateQueries({ queryKey: ["pharmacy", "devices"] });
       await queryClient.invalidateQueries({ queryKey: ["pharmacy", "devices", "unassigned"] });
       await queryClient.invalidateQueries({ queryKey: ["pharmacy", "dashboard"] });
-      toast.success("Patient removed");
+      toast.success(t("patients.removedToast"));
       setRemovePatientTarget(null);
     },
-    onError: (e: Error) => toast.error(e?.message ?? "Failed to remove patient"),
+    onError: (e: Error) => toast.error(e?.message ?? t("patients.removeFailed")),
   });
 
   const { data, isLoading, isError } = useQuery({
@@ -129,19 +131,20 @@ const Patients: React.FC = () => {
   };
   const isEmpty = all.length === 0;
   const hasNoResults = filtered.length === 0 && hasActiveFilters;
+  const dash = t("common.dash");
 
   return (
     <div className="space-y-6 animate-slide-in">
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-foreground">Patients</h1>
+          <h1 className="text-2xl font-bold text-foreground">{t("patients.title")}</h1>
           <p className="text-sm text-muted-foreground mt-1">
-            Manage patients and assigned devices
+            {t("patients.subtitle")}
           </p>
         </div>
         <Button onClick={() => navigate("/patients/add")}>
           <UserPlus className="h-4 w-4 mr-2" />
-          Add patient
+          {t("patients.addPatient")}
         </Button>
       </div>
 
@@ -150,41 +153,43 @@ const Patients: React.FC = () => {
           <div className="relative flex-1 min-w-[200px] max-w-sm">
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground pointer-events-none" />
             <Input
-              placeholder="Search by name, device, phone or email..."
+              placeholder={t("patients.searchPlaceholder")}
               value={search}
               onChange={(e) => { setSearch(e.target.value); setPage(1); }}
               className="pl-9 pr-9"
-              aria-label="Search patients"
+              aria-label={t("patients.searchAria")}
             />
             {search.length > 0 && (
-              <Button type="button" variant="ghost" size="icon" className="absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7 text-muted-foreground hover:text-foreground" onClick={() => { setSearch(""); setPage(1); }} aria-label="Clear search">
+              <Button type="button" variant="ghost" size="icon" className="absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7 text-muted-foreground hover:text-foreground" onClick={() => { setSearch(""); setPage(1); }} aria-label={t("common.clearSearch")}>
                 <X className="h-4 w-4" />
               </Button>
             )}
           </div>
-          {hasActiveFilters && <Button variant="ghost" size="sm" onClick={clearFilters}>Clear filters</Button>}
+          {hasActiveFilters && <Button variant="ghost" size="sm" onClick={clearFilters}>{t("common.clearFilters")}</Button>}
         </div>
         {hasActiveFilters && (
-          <p className="text-xs text-muted-foreground mt-2">{filtered.length} result{filtered.length !== 1 ? "s" : ""} found</p>
+          <p className="text-xs text-muted-foreground mt-2">
+            {t("common.resultsFound", { count: filtered.length })}
+          </p>
         )}
       </div>
 
-      {isLoading && <LoadingCard message="Loading patients…" />}
+      {isLoading && <LoadingCard message={t("patients.loading")} />}
 
       {!isLoading && isError && (
         <div className="rounded-xl border bg-card p-8 text-center">
-          <p className="text-sm text-destructive">Failed to load patients.</p>
+          <p className="text-sm text-destructive">{t("patients.loadFailed")}</p>
         </div>
       )}
 
       {!isLoading && !isError && isEmpty && (
         <div className="rounded-xl border border-dashed bg-card p-12 text-center">
           <Users className="mx-auto h-12 w-12 text-muted-foreground" />
-          <h2 className="mt-4 text-lg font-semibold text-foreground">No patients yet</h2>
-          <p className="mt-2 text-sm text-muted-foreground max-w-sm mx-auto">Add a patient to get started.</p>
+          <h2 className="mt-4 text-lg font-semibold text-foreground">{t("patients.emptyTitle")}</h2>
+          <p className="mt-2 text-sm text-muted-foreground max-w-sm mx-auto">{t("patients.emptyHint")}</p>
           <Button className="mt-4" onClick={() => navigate("/patients/add")}>
             <UserPlus className="h-4 w-4 mr-2" />
-            Add patient
+            {t("patients.addPatient")}
           </Button>
         </div>
       )}
@@ -192,9 +197,9 @@ const Patients: React.FC = () => {
       {!isLoading && !isError && !isEmpty && hasNoResults && (
         <div className="rounded-xl border bg-card p-12 text-center">
           <Search className="mx-auto h-12 w-12 text-muted-foreground" />
-          <h2 className="mt-4 text-lg font-semibold text-foreground">No matching patients</h2>
-          <p className="mt-2 text-sm text-muted-foreground">Try a different search or clear filters.</p>
-          <Button variant="outline" className="mt-4" onClick={clearFilters}>Clear filters</Button>
+          <h2 className="mt-4 text-lg font-semibold text-foreground">{t("patients.noMatchTitle")}</h2>
+          <p className="mt-2 text-sm text-muted-foreground">{t("common.tryDifferentSearch")}</p>
+          <Button variant="outline" className="mt-4" onClick={clearFilters}>{t("common.clearFilters")}</Button>
         </div>
       )}
 
@@ -206,19 +211,21 @@ const Patients: React.FC = () => {
       >
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Remove patient?</AlertDialogTitle>
-            <AlertDialogDescription>
-              {removePatientTarget ? (
-                <>
-                  This permanently deletes{" "}
-                  <span className="font-medium text-foreground">{removePatientTarget.name}</span> and unassigns any linked
-                  device. This cannot be undone.
-                </>
-              ) : null}
+            <AlertDialogTitle>{t("patients.removeTitle")}</AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div>
+                {removePatientTarget ? (
+                  <Trans
+                    i18nKey="patients.removeDesc"
+                    values={{ name: removePatientTarget.name }}
+                    components={[<span className="font-medium text-foreground" key="0" />]}
+                  />
+                ) : null}
+              </div>
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={deletePatientMutation.isPending}>Cancel</AlertDialogCancel>
+            <AlertDialogCancel disabled={deletePatientMutation.isPending}>{t("common.cancel")}</AlertDialogCancel>
             <Button
               variant="destructive"
               disabled={deletePatientMutation.isPending || !removePatientTarget}
@@ -226,7 +233,7 @@ const Patients: React.FC = () => {
                 if (removePatientTarget) deletePatientMutation.mutate(removePatientTarget.id);
               }}
             >
-              {deletePatientMutation.isPending ? "Removing…" : "Remove patient"}
+              {deletePatientMutation.isPending ? t("common.removing") : t("patients.removeSubmit")}
             </Button>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -240,19 +247,24 @@ const Patients: React.FC = () => {
       >
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Unassign device?</AlertDialogTitle>
-            <AlertDialogDescription>
-              {unassignTarget ? (
-                <>
-                  Remove device <span className="font-medium text-foreground">{unassignTarget.deviceId}</span> from{" "}
-                  <span className="font-medium text-foreground">{unassignTarget.patientName}</span>. The device remains
-                  available to assign again from the Devices page.
-                </>
-              ) : null}
+            <AlertDialogTitle>{t("patients.unassignTitle")}</AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div>
+                {unassignTarget ? (
+                  <Trans
+                    i18nKey="patients.unassignDesc"
+                    values={{ device: unassignTarget.deviceId, patient: unassignTarget.patientName }}
+                    components={[
+                      <span className="font-medium text-foreground" key="0" />,
+                      <span className="font-medium text-foreground" key="1" />,
+                    ]}
+                  />
+                ) : null}
+              </div>
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={unassignMutation.isPending}>Cancel</AlertDialogCancel>
+            <AlertDialogCancel disabled={unassignMutation.isPending}>{t("common.cancel")}</AlertDialogCancel>
             <Button
               variant="destructive"
               disabled={unassignMutation.isPending || !unassignTarget}
@@ -260,7 +272,7 @@ const Patients: React.FC = () => {
                 if (unassignTarget) unassignMutation.mutate(unassignTarget.deviceId);
               }}
             >
-              {unassignMutation.isPending ? "Unassigning…" : "Unassign"}
+              {unassignMutation.isPending ? t("common.unassigning") : t("common.unassign")}
             </Button>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -271,12 +283,12 @@ const Patients: React.FC = () => {
           <table className="w-full">
             <thead>
               <tr className="border-b bg-muted/50">
-                <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Patient</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider hidden sm:table-cell">Phone</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider hidden md:table-cell">Email</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Device</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">{t("patients.colPatient")}</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider hidden sm:table-cell">{t("patients.colPhone")}</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider hidden md:table-cell">{t("patients.colEmail")}</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">{t("patients.colDevice")}</th>
                 <th className="px-4 py-3 text-right text-xs font-medium text-muted-foreground uppercase tracking-wider w-[120px]">
-                  Actions
+                  {t("patients.colActions")}
                 </th>
               </tr>
             </thead>
@@ -300,7 +312,7 @@ const Patients: React.FC = () => {
                         {r.phone}
                       </span>
                     ) : (
-                      "—"
+                      dash
                     )}
                   </td>
                   <td className="px-4 py-3 text-sm text-muted-foreground hidden md:table-cell">
@@ -310,7 +322,7 @@ const Patients: React.FC = () => {
                         {r.email}
                       </span>
                     ) : (
-                      "—"
+                      dash
                     )}
                   </td>
                   <td className="px-4 py-3 text-sm text-muted-foreground" onClick={(e) => e.stopPropagation()}>
@@ -333,7 +345,7 @@ const Patients: React.FC = () => {
                           onClick={() => setUnassignTarget({ deviceId: r.deviceId!, patientName: r.name })}
                         >
                           <UserMinus className="h-3.5 w-3.5" aria-hidden />
-                          Unassign
+                          {t("common.unassign")}
                         </Button>
                       </div>
                     ) : (
@@ -345,7 +357,7 @@ const Patients: React.FC = () => {
                         onClick={() => navigate(`/patients/${encodeURIComponent(r.id)}/edit`)}
                       >
                         <UserPlus className="h-4 w-4 shrink-0" aria-hidden />
-                        Assign
+                        {t("patients.assign")}
                       </Button>
                     )}
                   </td>
@@ -356,8 +368,8 @@ const Patients: React.FC = () => {
                         variant="ghost"
                         size="icon"
                         className="h-8 w-8 text-primary hover:text-primary"
-                        title="Edit patient"
-                        aria-label="Edit patient"
+                        title={t("common.editPatient")}
+                        aria-label={t("common.editPatient")}
                         onClick={() => navigate(`/patients/${encodeURIComponent(r.id)}/edit`)}
                       >
                         <Pencil className="h-4 w-4" />
@@ -368,8 +380,8 @@ const Patients: React.FC = () => {
                         size="icon"
                         className="h-8 w-8 text-destructive hover:text-destructive"
                         disabled={deletePatientMutation.isPending}
-                        title="Remove patient"
-                        aria-label="Remove patient"
+                        title={t("common.removePatient")}
+                        aria-label={t("common.removePatient")}
                         onClick={() => setRemovePatientTarget({ id: r.id, name: r.name })}
                       >
                         <Trash2 className="h-4 w-4" />
@@ -382,7 +394,7 @@ const Patients: React.FC = () => {
           </table>
           <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 px-4 py-3 border-t bg-muted/30">
             <div className="flex items-center gap-2">
-              <span className="text-sm text-muted-foreground whitespace-nowrap">Items per page:</span>
+              <span className="text-sm text-muted-foreground whitespace-nowrap">{t("common.itemsPerPage")}</span>
               <Select value={String(pageSize)} onValueChange={(v) => { setPageSize(Number(v)); setPage(1); }}>
                 <SelectTrigger className="w-[70px] h-8"><SelectValue /></SelectTrigger>
                 <SelectContent>
@@ -390,12 +402,20 @@ const Patients: React.FC = () => {
                 </SelectContent>
               </Select>
             </div>
-            <p className="text-sm text-muted-foreground">Showing {startItem} to {endItem} of {filtered.length} results</p>
+            <p className="text-sm text-muted-foreground">
+              {t("common.showingRange", { start: startItem, end: endItem, total: filtered.length })}
+            </p>
             {totalPages > 1 && (
               <div className="flex items-center gap-2">
-                <Button variant="outline" size="sm" onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={safePage <= 1}>Previous</Button>
-                <span className="text-sm text-muted-foreground px-1">Page {safePage} of {totalPages}</span>
-                <Button variant="outline" size="sm" onClick={() => setPage((p) => Math.min(totalPages, p + 1))} disabled={safePage >= totalPages}>Next</Button>
+                <Button variant="outline" size="sm" onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={safePage <= 1}>
+                  {t("common.previous")}
+                </Button>
+                <span className="text-sm text-muted-foreground px-1">
+                  {t("pagination.pageOf", { page: safePage, total: totalPages })}
+                </span>
+                <Button variant="outline" size="sm" onClick={() => setPage((p) => Math.min(totalPages, p + 1))} disabled={safePage >= totalPages}>
+                  {t("common.next")}
+                </Button>
               </div>
             )}
           </div>

@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import { Filter, Monitor, Search, UserPlus, UserMinus, X } from "lucide-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { pharmacyApi } from "@/api/pharmacy";
@@ -42,13 +43,16 @@ type DeviceRow = {
   patientLabel: string | null;
 };
 
-function patientInfoFromDevice(d: Record<string, unknown>): { patientId: string | null; patientLabel: string | null } {
+function patientInfoFromDevice(
+  d: Record<string, unknown>,
+  patientFallback: string
+): { patientId: string | null; patientLabel: string | null } {
   const pid = d.patientId ?? (d.patient as { id?: string } | undefined)?.id;
   const patientIdStr = pid != null && String(pid).trim() !== "" ? String(pid) : null;
   if (!patientIdStr) return { patientId: null, patientLabel: null };
   const name = (d.patientName ?? d.name) as string | undefined;
-  const t = typeof name === "string" ? name.trim() : "";
-  const label = t && t !== "—" ? t : "Patient";
+  const nt = typeof name === "string" ? name.trim() : "";
+  const label = nt && nt !== "—" ? nt : patientFallback;
   return { patientId: patientIdStr, patientLabel: label };
 }
 
@@ -89,6 +93,7 @@ const PAGE_SIZE_OPTIONS = [5, 10, 25, 50];
 const NONE_PATIENT = "__none__";
 
 const Devices: React.FC = () => {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { patients: addedPatients } = usePatients();
@@ -140,12 +145,12 @@ const Devices: React.FC = () => {
       await queryClient.invalidateQueries({ queryKey: ["pharmacy", "devices", "unassigned"] });
       await queryClient.invalidateQueries({ queryKey: ["pharmacy", "patients"] });
       await queryClient.invalidateQueries({ queryKey: ["pharmacy", "dashboard"] });
-      toast.success("Device assigned to patient");
+      toast.success(t("devices.assignToast"));
       setAssignDeviceId(null);
       setAssignPatientId(NONE_PATIENT);
     },
     onError: (e: Error) => {
-      toast.error(e?.message ?? "Failed to assign device");
+      toast.error(e?.message ?? t("devices.assignFailed"));
     },
   });
 
@@ -156,11 +161,11 @@ const Devices: React.FC = () => {
       await queryClient.invalidateQueries({ queryKey: ["pharmacy", "devices", "unassigned"] });
       await queryClient.invalidateQueries({ queryKey: ["pharmacy", "patients"] });
       await queryClient.invalidateQueries({ queryKey: ["pharmacy", "dashboard"] });
-      toast.success("Device unassigned from patient");
+      toast.success(t("devices.unassignToast"));
       setUnassignTarget(null);
     },
     onError: (e: Error) => {
-      toast.error(e?.message ?? "Failed to unassign device");
+      toast.error(e?.message ?? t("devices.unassignFailed"));
     },
   });
 
@@ -211,7 +216,7 @@ const Devices: React.FC = () => {
       const did = String(d.id ?? "");
       const serial = deviceSerialFromRecord(d);
       const keys = [did, serial ?? ""].filter((x) => x.trim().length > 0);
-      const merged = mergePatientFromAssignments(did, keys, patientInfoFromDevice(d), patientByDeviceId);
+      const merged = mergePatientFromAssignments(did, keys, patientInfoFromDevice(d, t("common.patient")), patientByDeviceId);
       return {
         row: {
           id: did,
@@ -250,8 +255,8 @@ const Devices: React.FC = () => {
 
     return [...orgTagged, ...globalTagged]
       .sort((a, b) => (b.ms !== a.ms ? b.ms - a.ms : b.id.localeCompare(a.id, undefined, { numeric: true })))
-      .map((t) => t.row);
-  }, [devicesData, unassignedData, patientByDeviceId]);
+      .map((x) => x.row);
+  }, [devicesData, unassignedData, patientByDeviceId, t]);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -296,9 +301,9 @@ const Devices: React.FC = () => {
   return (
     <div className="space-y-6 animate-slide-in">
       <div>
-        <h1 className="text-2xl font-bold text-foreground">Devices</h1>
+        <h1 className="text-2xl font-bold text-foreground">{t("devices.title")}</h1>
         <p className="text-sm text-muted-foreground mt-1">
-          Devices not assigned to a patient, and devices assigned to patients by your pharmacy
+          {t("devices.subtitle")}
         </p>
       </div>
 
@@ -308,14 +313,14 @@ const Devices: React.FC = () => {
           <div className="relative flex-1 min-w-[200px] max-w-sm">
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground pointer-events-none" />
             <Input
-              placeholder="Search by device id, serial, or patient..."
+              placeholder={t("devices.searchPlaceholder")}
               value={search}
               onChange={(e) => {
                 setSearch(e.target.value);
                 setPage(1);
               }}
               className="pl-9 pr-9"
-              aria-label="Search devices"
+              aria-label={t("devices.searchAria")}
             />
             {search.length > 0 && (
               <Button
@@ -327,7 +332,7 @@ const Devices: React.FC = () => {
                   setSearch("");
                   setPage(1);
                 }}
-                aria-label="Clear search"
+                aria-label={t("common.clearSearch")}
               >
                 <X className="h-4 w-4" />
               </Button>
@@ -335,7 +340,7 @@ const Devices: React.FC = () => {
           </div>
           <div className="flex items-center gap-2">
             <Filter className="h-4 w-4 text-muted-foreground shrink-0" />
-            <span className="text-sm text-muted-foreground whitespace-nowrap">Assignment:</span>
+            <span className="text-sm text-muted-foreground whitespace-nowrap">{t("common.assignment")}:</span>
             <Select
               value={assignmentFilter}
               onValueChange={(v) => {
@@ -347,49 +352,51 @@ const Devices: React.FC = () => {
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">All</SelectItem>
-                <SelectItem value="unassigned">Unassigned</SelectItem>
-                <SelectItem value="assigned">Assigned</SelectItem>
+                <SelectItem value="all">{t("common.all")}</SelectItem>
+                <SelectItem value="unassigned">{t("common.unassignedFilter")}</SelectItem>
+                <SelectItem value="assigned">{t("common.assignedFilter")}</SelectItem>
               </SelectContent>
             </Select>
           </div>
           {hasActiveFilters && (
             <Button variant="ghost" size="sm" onClick={clearFilters}>
-              Clear filters
+              {t("common.clearFilters")}
             </Button>
           )}
         </div>
         {hasActiveFilters && (
           <p className="text-xs text-muted-foreground mt-2">
-            {filtered.length} result{filtered.length !== 1 ? "s" : ""} found
+            {t("common.resultsFound", { count: filtered.length })}
           </p>
         )}
       </div>
 
-      {isLoading && <LoadingCard message="Loading devices…" />}
+      {isLoading && <LoadingCard message={t("devices.loading")} />}
 
       {!isLoading && isError && (
         <div className="rounded-xl border bg-card p-8 text-center">
-          <p className="text-sm text-destructive">Failed to load devices.</p>
+          <p className="text-sm text-destructive">{t("devices.loadFailed")}</p>
         </div>
       )}
 
       {!isLoading && !isError && isEmpty && (
         <div className="rounded-xl border border-dashed bg-card p-8 text-center">
           <Monitor className="mx-auto h-10 w-10 text-muted-foreground" />
-          <p className="mt-3 text-sm text-muted-foreground">No devices to show.</p>
+          <p className="mt-3 text-sm text-muted-foreground">{t("devices.empty")}</p>
         </div>
       )}
 
       {!isLoading && !isError && !isEmpty && hasNoResults && (
         <div className="rounded-xl border bg-card p-12 text-center">
           <Search className="mx-auto h-12 w-12 text-muted-foreground" />
-          <h2 className="mt-4 text-lg font-semibold text-foreground">No matching devices</h2>
+          <h2 className="mt-4 text-lg font-semibold text-foreground">{t("devices.noMatchTitle")}</h2>
           <p className="mt-2 text-sm text-muted-foreground">
-            No devices match your filters{search.trim() ? ` for "${search.trim()}"` : ""}.
+            {t("devices.noMatchDesc", {
+              suffix: search.trim() ? t("devices.noMatchSuffix", { q: search.trim() }) : "",
+            })}
           </p>
           <Button variant="outline" className="mt-4" onClick={clearFilters}>
-            Clear filters
+            {t("common.clearFilters")}
           </Button>
         </div>
       )}
@@ -405,24 +412,24 @@ const Devices: React.FC = () => {
       >
         <DialogContent className="sm:max-w-md" onClick={(e) => e.stopPropagation()}>
           <DialogHeader>
-            <DialogTitle>Assign device to patient</DialogTitle>
+            <DialogTitle>{t("devices.assignDialogTitle")}</DialogTitle>
             <DialogDescription>
-              Each device can have only one patient and each patient only one device. Only patients without a device are listed.
+              {t("devices.assignDialogDesc")}
             </DialogDescription>
           </DialogHeader>
           {assignablePatients.length === 0 ? (
             <p className="text-sm text-muted-foreground">
-              No patients without an assigned device. Add a patient or unassign a device first.
+              {t("devices.noPatientsToAssign")}
             </p>
           ) : (
             <div className="grid gap-2 py-2">
-              <span className="text-sm font-medium text-foreground">Patient</span>
+              <span className="text-sm font-medium text-foreground">{t("devices.patientLabel")}</span>
               <Select value={assignPatientId} onValueChange={setAssignPatientId}>
                 <SelectTrigger>
-                  <SelectValue placeholder="Select patient" />
+                  <SelectValue placeholder={t("devices.selectPatientPlaceholder")} />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value={NONE_PATIENT}>Select patient…</SelectItem>
+                  <SelectItem value={NONE_PATIENT}>{t("devices.selectPatientItem")}</SelectItem>
                   {assignablePatients.map((p) => (
                     <SelectItem key={p.id} value={p.id}>
                       {p.name}
@@ -440,7 +447,7 @@ const Devices: React.FC = () => {
                 setAssignPatientId(NONE_PATIENT);
               }}
             >
-              Cancel
+              {t("common.cancel")}
             </Button>
             <Button
               disabled={
@@ -460,7 +467,7 @@ const Devices: React.FC = () => {
                 });
               }}
             >
-              {assignMutation.isPending ? "Assigning…" : "Assign"}
+              {assignMutation.isPending ? t("common.assigning") : t("common.assign")}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -474,19 +481,20 @@ const Devices: React.FC = () => {
       >
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Unassign device?</AlertDialogTitle>
+            <AlertDialogTitle>{t("devices.unassignTitle")}</AlertDialogTitle>
             <AlertDialogDescription>
               {unassignTarget ? (
                 <>
-                  Remove patient <span className="font-medium text-foreground">{unassignTarget.patientLabel}</span> from
-                  device <span className="font-medium text-foreground">{unassignTarget.deviceId}</span>. The device stays
-                  in your pharmacy and can be assigned again later.
+                  {t("devices.unassignDesc", {
+                    patient: unassignTarget.patientLabel,
+                    device: unassignTarget.deviceId,
+                  })}
                 </>
               ) : null}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={unassignMutation.isPending}>Cancel</AlertDialogCancel>
+            <AlertDialogCancel disabled={unassignMutation.isPending}>{t("common.cancel")}</AlertDialogCancel>
             <Button
               variant="destructive"
               disabled={unassignMutation.isPending || !unassignTarget}
@@ -494,7 +502,7 @@ const Devices: React.FC = () => {
                 if (unassignTarget) unassignMutation.mutate(unassignTarget.deviceId);
               }}
             >
-              {unassignMutation.isPending ? "Unassigning…" : "Unassign"}
+              {unassignMutation.isPending ? t("common.unassigning") : t("common.unassign")}
             </Button>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -506,13 +514,13 @@ const Devices: React.FC = () => {
             <thead>
               <tr className="border-b bg-muted/50">
                 <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                  Device
+                  {t("devices.colDevice")}
                 </th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                  Patient
+                  {t("devices.colPatient")}
                 </th>
                 <th className="px-4 py-3 text-right text-xs font-medium text-muted-foreground uppercase tracking-wider w-[140px]">
-                  Actions
+                  {t("devices.colActions")}
                 </th>
               </tr>
             </thead>
@@ -532,7 +540,7 @@ const Devices: React.FC = () => {
                         </span>
                         {row.serialNumber && row.serialNumber !== row.id ? (
                           <span className="block text-xs text-muted-foreground truncate" title={row.id}>
-                            ID: {row.id}
+                            {t("common.idPrefix")} {row.id}
                           </span>
                         ) : null}
                       </div>
@@ -547,7 +555,7 @@ const Devices: React.FC = () => {
                         {row.patientLabel}
                       </Link>
                     ) : (
-                      <span className="text-muted-foreground">—</span>
+                      <span className="text-muted-foreground">{t("common.dash")}</span>
                     )}
                   </td>
                   <td className="px-4 py-3 text-right" onClick={(e) => e.stopPropagation()}>
@@ -559,11 +567,11 @@ const Devices: React.FC = () => {
                         className="h-8 gap-1.5"
                         disabled={unassignMutation.isPending}
                         onClick={() =>
-                          setUnassignTarget({ deviceId: row.id, patientLabel: row.patientLabel ?? "Patient" })
+                          setUnassignTarget({ deviceId: row.id, patientLabel: row.patientLabel ?? t("common.patient") })
                         }
                       >
                         <UserMinus className="h-4 w-4 shrink-0" aria-hidden />
-                        Unassign
+                        {t("common.unassign")}
                       </Button>
                     ) : (
                       <Button
@@ -577,7 +585,7 @@ const Devices: React.FC = () => {
                         }}
                       >
                         <UserPlus className="h-4 w-4 shrink-0" aria-hidden />
-                        Assign
+                        {t("common.assign")}
                       </Button>
                     )}
                   </td>
@@ -588,7 +596,7 @@ const Devices: React.FC = () => {
 
           <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 px-4 py-3 border-t bg-muted/30">
             <div className="flex items-center gap-2">
-              <span className="text-sm text-muted-foreground whitespace-nowrap">Items per page:</span>
+              <span className="text-sm text-muted-foreground whitespace-nowrap">{t("common.itemsPerPage")}</span>
               <Select
                 value={String(pageSize)}
                 onValueChange={(v) => {
@@ -609,7 +617,7 @@ const Devices: React.FC = () => {
               </Select>
             </div>
             <p className="text-sm text-muted-foreground">
-              Showing {startItem} to {endItem} of {filtered.length} results
+              {t("common.showingRange", { start: startItem, end: endItem, total: filtered.length })}
             </p>
             {totalPages > 1 && (
               <div className="flex items-center gap-2">
@@ -619,10 +627,10 @@ const Devices: React.FC = () => {
                   onClick={() => setPage((p) => Math.max(1, p - 1))}
                   disabled={safePage <= 1}
                 >
-                  Previous
+                  {t("common.previous")}
                 </Button>
                 <span className="text-sm text-muted-foreground px-1">
-                  Page {safePage} of {totalPages}
+                  {t("pagination.pageOf", { page: safePage, total: totalPages })}
                 </span>
                 <Button
                   variant="outline"
@@ -630,7 +638,7 @@ const Devices: React.FC = () => {
                   onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
                   disabled={safePage >= totalPages}
                 >
-                  Next
+                  {t("common.next")}
                 </Button>
               </div>
             )}

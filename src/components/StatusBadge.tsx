@@ -1,4 +1,5 @@
 import React from "react";
+import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/utils";
 
 interface StatusBadgeProps {
@@ -6,24 +7,39 @@ interface StatusBadgeProps {
   className?: string;
 }
 
-const statusConfig: Record<string, { label: string; className: string }> = {
-  online: { label: "Online", className: "bg-success/15 text-success" },
-  offline: { label: "Offline", className: "bg-muted text-muted-foreground" },
-  error: { label: "Error", className: "bg-destructive/15 text-destructive" },
-  stopped: { label: "Stopped", className: "bg-warning/15 text-warning" },
-  pending: { label: "Pending", className: "bg-warning/15 text-warning" },
-  resolved: { label: "Resolved", className: "bg-success/15 text-success" },
-  in_progress: { label: "In Progress", className: "bg-info/15 text-info" },
-  active: { label: "Active", className: "bg-success/15 text-success" },
-  inactive: { label: "Inactive", className: "bg-muted text-muted-foreground" },
+const statusClass: Record<string, string> = {
+  online: "bg-success/15 text-success",
+  offline: "bg-muted text-muted-foreground",
+  error: "bg-destructive/15 text-destructive",
+  stopped: "bg-warning/15 text-warning",
+  pending: "bg-warning/15 text-warning",
+  resolved: "bg-success/15 text-success",
+  in_progress: "bg-info/15 text-info",
+  active: "bg-success/15 text-success",
+  inactive: "bg-muted text-muted-foreground",
 };
 
 const StatusBadge: React.FC<StatusBadgeProps> = ({ status, className }) => {
-  const config = statusConfig[status] || { label: status, className: "bg-muted text-muted-foreground" };
+  const { t } = useTranslation();
+  const label = t(`status.${status}`, { defaultValue: String(status).replace(/_/g, " ") });
+  const cls = statusClass[status] || "bg-muted text-muted-foreground";
   return (
-    <span className={cn("inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium", config.className, className)}>
-      <span className={cn("h-1.5 w-1.5 rounded-full", status === "online" || status === "active" || status === "resolved" ? "bg-success" : status === "error" ? "bg-destructive" : status === "pending" || status === "stopped" ? "bg-warning" : status === "in_progress" ? "bg-info" : "bg-muted-foreground")} />
-      {config.label}
+    <span className={cn("inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium", cls, className)}>
+      <span
+        className={cn(
+          "h-1.5 w-1.5 rounded-full",
+          status === "online" || status === "active" || status === "resolved"
+            ? "bg-success"
+            : status === "error"
+              ? "bg-destructive"
+              : status === "pending" || status === "stopped"
+                ? "bg-warning"
+                : status === "in_progress"
+                  ? "bg-info"
+                  : "bg-muted-foreground"
+        )}
+      />
+      {label}
     </span>
   );
 };

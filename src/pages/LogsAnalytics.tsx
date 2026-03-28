@@ -1,4 +1,5 @@
 import React, { useState, useCallback, useMemo, useEffect } from "react";
+import { useTranslation } from "react-i18next";
 import { BarChart3, Calendar, Clock, Filter, Package, AlertTriangle, StopCircle, Play, HelpCircle, Search, X, ChevronDown, Check } from "lucide-react";
 import type { ActivityLog, Device } from "@/data/mockData";
 import { Button } from "@/components/ui/button";
@@ -13,16 +14,6 @@ import { pharmacyApi } from "@/api/pharmacy";
 import { sortRecordsNewestFirst } from "@/lib/listSort";
 import LoadingCard from "@/components/LoadingCard";
 
-const TYPE_OPTIONS: { value: string; label: string }[] = [
-  { value: "all", label: "All types" },
-  { value: "dispense", label: "Dispense" },
-  { value: "refill", label: "Refill" },
-  { value: "error", label: "Error" },
-  { value: "stop", label: "Stop" },
-  { value: "start", label: "Start" },
-  { value: "help", label: "Help" },
-];
-
 const PAGE_SIZE_OPTIONS = [5, 10, 25, 50];
 
 function parseLogDate(ts: string): Date {
@@ -30,7 +21,25 @@ function parseLogDate(ts: string): Date {
   return new Date(datePart + "T00:00:00");
 }
 
+function formatLogsLogTypeLabel(t: (k: string, o?: { defaultValue?: string }) => string, type: string): string {
+  const human = type.replace(/_/g, " ");
+  return t(`deviceDetail.logTypes.${type}`, { defaultValue: human });
+}
+
 const LogsAnalytics: React.FC = () => {
+  const { t } = useTranslation();
+  const typeOptions = useMemo(
+    () => [
+      { value: "all", label: t("logs.typeAll") },
+      { value: "dispense", label: t("logs.typeDispense") },
+      { value: "refill", label: t("logs.typeRefill") },
+      { value: "error", label: t("logs.typeError") },
+      { value: "stop", label: t("logs.typeStop") },
+      { value: "start", label: t("logs.typeStart") },
+      { value: "help", label: t("logs.typeHelp") },
+    ],
+    [t]
+  );
   const [search, setSearch] = useState("");
   const [typeFilter, setTypeFilter] = useState<string>("all");
   const [deviceFilter, setDeviceFilter] = useState<string>("all");
@@ -106,6 +115,7 @@ const LogsAnalytics: React.FC = () => {
   }, []);
   const isEmpty = logs.length === 0;
   const hasNoResults = filtered.length === 0 && hasActiveFilters;
+  const allDevicesLabel = t("logs.allDevices");
 
   const logTypeIcons: Record<string, React.ReactNode> = {
     dispense: <Package className="h-4 w-4 text-success" />,
@@ -128,8 +138,8 @@ const LogsAnalytics: React.FC = () => {
   return (
     <div className="space-y-6 animate-slide-in">
       <div>
-        <h1 className="text-2xl font-bold text-foreground">Logs & Analytics</h1>
-        <p className="text-sm text-muted-foreground mt-1">Device activity logs and operational analytics</p>
+        <h1 className="text-2xl font-bold text-foreground">{t("logs.title")}</h1>
+        <p className="text-sm text-muted-foreground mt-1">{t("logs.subtitle")}</p>
       </div>
 
       {/* Search and filters toolbar - same as admin */}
@@ -138,11 +148,11 @@ const LogsAnalytics: React.FC = () => {
           <div className="relative flex-1 min-w-[200px] max-w-sm">
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground pointer-events-none" />
             <Input
-              placeholder="Search by device, description, or type..."
+              placeholder={t("logs.searchPlaceholder")}
               value={search}
               onChange={(e) => { setSearch(e.target.value); setPage(1); }}
               className="pl-9 pr-9"
-              aria-label="Search logs"
+              aria-label={t("logs.searchAria")}
             />
             {search.length > 0 && (
               <Button
@@ -151,7 +161,7 @@ const LogsAnalytics: React.FC = () => {
                 size="icon"
                 className="absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7 text-muted-foreground hover:text-foreground"
                 onClick={() => { setSearch(""); setPage(1); }}
-                aria-label="Clear search"
+                aria-label={t("common.clearSearch")}
               >
                 <X className="h-4 w-4" />
               </Button>
@@ -159,7 +169,7 @@ const LogsAnalytics: React.FC = () => {
           </div>
           <div className="flex items-center gap-2">
             <Filter className="h-4 w-4 text-muted-foreground shrink-0" />
-            <span className="text-sm text-muted-foreground whitespace-nowrap">Type:</span>
+            <span className="text-sm text-muted-foreground whitespace-nowrap">{t("logs.filterTypeLabel")}</span>
             <Popover open={typeDropdownOpen} onOpenChange={setTypeDropdownOpen}>
               <PopoverTrigger asChild>
                 <Button
@@ -199,7 +209,7 @@ const LogsAnalytics: React.FC = () => {
             </Popover>
           </div>
           <div className="flex items-center gap-2">
-            <span className="text-sm text-muted-foreground whitespace-nowrap">Device:</span>
+            <span className="text-sm text-muted-foreground whitespace-nowrap">{t("logs.filterDeviceLabel")}</span>
             <Popover open={deviceDropdownOpen} onOpenChange={setDeviceDropdownOpen}>
               <PopoverTrigger asChild>
                 <Button
@@ -208,18 +218,18 @@ const LogsAnalytics: React.FC = () => {
                   aria-expanded={deviceDropdownOpen}
                   className="w-[160px] justify-between font-normal"
                 >
-                  {deviceFilter === "all" ? "All devices" : deviceFilter}
+                  {deviceFilter === "all" ? allDevicesLabel : deviceFilter}
                   <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                 </Button>
               </PopoverTrigger>
               <PopoverContent className="w-[240px] p-0" align="start">
                 <Command>
-                  <CommandInput placeholder="Search devices..." />
+                  <CommandInput placeholder={t("logs.deviceSearchPlaceholder")} />
                   <CommandList>
-                    <CommandEmpty>No device found.</CommandEmpty>
+                    <CommandEmpty>{t("logs.noDeviceFound")}</CommandEmpty>
                     <CommandGroup>
                       <CommandItem
-                        value="All devices"
+                        value={allDevicesLabel}
                         onSelect={() => {
                           setDeviceFilter("all");
                           setPage(1);
@@ -227,7 +237,7 @@ const LogsAnalytics: React.FC = () => {
                         }}
                       >
                         <Check className={cn("mr-2 h-4 w-4", deviceFilter === "all" ? "opacity-100" : "opacity-0")} />
-                        All devices
+                        {allDevicesLabel}
                       </CommandItem>
                       {devices.map((d) => (
                         <CommandItem
@@ -258,7 +268,7 @@ const LogsAnalytics: React.FC = () => {
                 setDateFrom(e.target.value);
                 setPage(1);
               }}
-              aria-label="From date"
+              aria-label={t("common.fromDate")}
             />
             <span className="text-muted-foreground text-sm shrink-0">–</span>
             <DateInput
@@ -268,30 +278,30 @@ const LogsAnalytics: React.FC = () => {
                 setDateTo(e.target.value);
                 setPage(1);
               }}
-              aria-label="To date"
+              aria-label={t("common.toDate")}
             />
           </div>
           {hasActiveFilters && (
             <Button variant="ghost" size="sm" onClick={clearFilters}>
-              Clear filters
+              {t("common.clearFilters")}
             </Button>
           )}
         </div>
         {hasActiveFilters && (
           <p className="text-xs text-muted-foreground mt-2">
-            {filtered.length} result{filtered.length !== 1 ? "s" : ""} found
+            {t("common.resultsFound", { count: filtered.length })}
           </p>
         )}
       </div>
 
-      {(logsLoading || devicesLoading) && <LoadingCard message="Loading logs & analytics…" />}
+      {(logsLoading || devicesLoading) && <LoadingCard message={t("logs.loading")} />}
 
       {isEmpty && (
         <div className="rounded-xl border border-dashed bg-card p-12 text-center">
           <BarChart3 className="mx-auto h-12 w-12 text-muted-foreground" />
-          <h2 className="mt-4 text-lg font-semibold text-foreground">No activity logs yet</h2>
+          <h2 className="mt-4 text-lg font-semibold text-foreground">{t("logs.emptyTitle")}</h2>
           <p className="mt-2 text-sm text-muted-foreground max-w-sm mx-auto">
-            Device activity logs will appear here as events occur.
+            {t("logs.emptyHint")}
           </p>
         </div>
       )}
@@ -299,10 +309,10 @@ const LogsAnalytics: React.FC = () => {
       {!isEmpty && hasNoResults && (
         <div className="rounded-xl border bg-card p-12 text-center">
           <Search className="mx-auto h-12 w-12 text-muted-foreground" />
-          <h2 className="mt-4 text-lg font-semibold text-foreground">No matching logs</h2>
-          <p className="mt-2 text-sm text-muted-foreground">Try a different search or clear filters.</p>
+          <h2 className="mt-4 text-lg font-semibold text-foreground">{t("logs.noMatchTitle")}</h2>
+          <p className="mt-2 text-sm text-muted-foreground">{t("common.tryDifferentSearch")}</p>
           <Button variant="outline" className="mt-4" onClick={clearFilters}>
-            Clear filters
+            {t("common.clearFilters")}
           </Button>
         </div>
       )}
@@ -312,10 +322,10 @@ const LogsAnalytics: React.FC = () => {
           <table className="w-full">
             <thead>
               <tr className="border-b bg-muted/50">
-                <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Type</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Device</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Description</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider hidden sm:table-cell">Timestamp</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">{t("logs.colType")}</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">{t("logs.colDevice")}</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">{t("logs.colDescription")}</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider hidden sm:table-cell">{t("logs.colTimestamp")}</th>
               </tr>
             </thead>
             <tbody className="divide-y">
@@ -326,7 +336,9 @@ const LogsAnalytics: React.FC = () => {
                       <div className={`flex h-7 w-7 items-center justify-center rounded-md ${logTypeBg[log.type] ?? "bg-muted"}`}>
                         {logTypeIcons[log.type]}
                       </div>
-                      <span className="text-xs uppercase tracking-wider font-medium text-muted-foreground">{log.type.replace(/_/g, " ")}</span>
+                      <span className="text-xs uppercase tracking-wider font-medium text-muted-foreground">
+                        {formatLogsLogTypeLabel(t, log.type)}
+                      </span>
                     </div>
                   </td>
                   <td className="px-4 py-3 text-sm font-medium text-card-foreground">{log.deviceId}</td>
@@ -343,7 +355,7 @@ const LogsAnalytics: React.FC = () => {
           </table>
           <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 px-4 py-3 border-t bg-muted/30">
             <div className="flex items-center gap-2">
-              <span className="text-sm text-muted-foreground whitespace-nowrap">Items per page:</span>
+              <span className="text-sm text-muted-foreground whitespace-nowrap">{t("common.itemsPerPage")}</span>
               <Select
                 value={String(pageSize)}
                 onValueChange={(v) => { setPageSize(Number(v)); setPage(1); }}
@@ -361,7 +373,7 @@ const LogsAnalytics: React.FC = () => {
               </Select>
             </div>
             <p className="text-sm text-muted-foreground">
-              Showing {startItem} to {endItem} of {filtered.length} results
+              {t("common.showingRange", { start: startItem, end: endItem, total: filtered.length })}
             </p>
             {totalPages > 1 && (
               <div className="flex items-center gap-2">
@@ -371,10 +383,10 @@ const LogsAnalytics: React.FC = () => {
                   onClick={() => setPage((p) => Math.max(1, p - 1))}
                   disabled={safePage <= 1}
                 >
-                  Previous
+                  {t("common.previous")}
                 </Button>
                 <span className="text-sm text-muted-foreground px-1">
-                  Page {safePage} of {totalPages}
+                  {t("pagination.pageOf", { page: safePage, total: totalPages })}
                 </span>
                 <Button
                   variant="outline"
@@ -382,7 +394,7 @@ const LogsAnalytics: React.FC = () => {
                   onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
                   disabled={safePage >= totalPages}
                 >
-                  Next
+                  {t("common.next")}
                 </Button>
               </div>
             )}

@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import { Monitor, HelpCircle, Bell, Package, UserCheck } from "lucide-react";
 import StatCard from "@/components/StatCard";
 import StatusBadge from "@/components/StatusBadge";
@@ -40,6 +41,7 @@ function invNeedsRefillAdminKpi(d: Record<string, unknown>): boolean {
 }
 
 const Dashboard: React.FC = () => {
+  const { t } = useTranslation();
   const [period, setPeriod] = useState<Period>("weekly");
   const navigate = useNavigate();
 
@@ -84,14 +86,14 @@ const Dashboard: React.FC = () => {
         assignedDeviceCount: summary.assignedDevices ?? 0,
         needsRefillCount: summary.needsRefill ?? 0,
         deviceStatusDistribution: [
-          { name: "Online", value: online, color: "hsl(160, 84%, 39%)" },
+          { name: t("dashboard.chartOnline"), value: online, color: "hsl(160, 84%, 39%)" },
           {
-            name: "Offline",
+            name: t("dashboard.chartOffline"),
             value: summary.offlineDevices ?? Math.max(0, total - online),
             color: "hsl(var(--muted-foreground))",
           },
-          { name: "Error", value: summary.errorDevices ?? 0, color: "hsl(0, 84%, 60%)" },
-          { name: "Stopped", value: summary.stoppedDevices ?? 0, color: "hsl(38, 92%, 50%)" },
+          { name: t("dashboard.chartError"), value: summary.errorDevices ?? 0, color: "hsl(0, 84%, 60%)" },
+          { name: t("dashboard.chartStopped"), value: summary.stoppedDevices ?? 0, color: "hsl(38, 92%, 50%)" },
         ],
       };
     }
@@ -114,13 +116,13 @@ const Dashboard: React.FC = () => {
       assignedDeviceCount: assigned,
       needsRefillCount: Math.max(refill, refillFromSummary),
       deviceStatusDistribution: [
-        { name: "Online", value: online, color: "hsl(160, 84%, 39%)" },
-        { name: "Offline", value: offline, color: "hsl(var(--muted-foreground))" },
-        { name: "Error", value: errorN, color: "hsl(0, 84%, 60%)" },
-        { name: "Stopped", value: stopped, color: "hsl(38, 92%, 50%)" },
+        { name: t("dashboard.chartOnline"), value: online, color: "hsl(160, 84%, 39%)" },
+        { name: t("dashboard.chartOffline"), value: offline, color: "hsl(var(--muted-foreground))" },
+        { name: t("dashboard.chartError"), value: errorN, color: "hsl(0, 84%, 60%)" },
+        { name: t("dashboard.chartStopped"), value: stopped, color: "hsl(38, 92%, 50%)" },
       ],
     };
-  }, [preferInventoryKpis, invItems, invCount, dashTotalDevices, summary]);
+  }, [preferInventoryKpis, invItems, invCount, dashTotalDevices, summary, t]);
 
   const pendingAlerts = summary.pendingAlerts ?? 0;
 
@@ -133,7 +135,9 @@ const Dashboard: React.FC = () => {
         const sub = serial && serial !== id ? `${id} · ${serial}` : id;
         return {
           id,
-          patientName: invHasPatient(d) ? String(d.patientName ?? "Patient").trim() || "Patient" : "Unassigned",
+          patientName: invHasPatient(d)
+            ? String(d.patientName ?? t("common.patient")).trim() || t("common.patient")
+            : t("common.unassigned"),
           serialNumber: sub,
           remainingPouches: Number(d.remainingPouches ?? d.dosesRemaining ?? 0),
           totalPouches: Number(d.totalPouches ?? d.totalDoses ?? 0) || 1,
@@ -143,7 +147,7 @@ const Dashboard: React.FC = () => {
     }
     if (fromDash.length > 0) return fromDash;
     return [];
-  }, [previews.devices, preferInventoryKpis, invItems]);
+  }, [previews.devices, preferInventoryKpis, invItems, t]);
 
   const pieHasData = deviceStatusDistribution.some((d) => d.value > 0);
   const dispenseHasData = dispenseData.some((p: any) => (p.dispensed ?? 0) + (p.errors ?? 0) + (p.refills ?? 0) > 0);
@@ -152,49 +156,49 @@ const Dashboard: React.FC = () => {
   return (
     <div className="space-y-6 animate-slide-in">
       <div>
-        <h1 className="text-2xl font-bold text-foreground">Pharmacy Dashboard</h1>
-        <p className="text-sm text-muted-foreground mt-1">Real-time overview of all devices and alerts</p>
+        <h1 className="text-2xl font-bold text-foreground">{t("dashboard.title")}</h1>
+        <p className="text-sm text-muted-foreground mt-1">{t("dashboard.subtitle")}</p>
       </div>
 
       {isError && (
         <div className="rounded-xl border bg-card p-8 text-center">
-          <p className="text-sm text-destructive">Failed to load dashboard.</p>
+          <p className="text-sm text-destructive">{t("dashboard.loadFailed")}</p>
           <p className="text-xs text-muted-foreground mt-2">
-            {(error as Error)?.message ?? "Check your connection and try again."}
+            {(error as Error)?.message ?? t("dashboard.connectionHint")}
           </p>
         </div>
       )}
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard
-          title="Total Devices"
+          title={t("dashboard.totalDevices")}
           value={totalDevices}
           icon={<Monitor className="h-5 w-5 text-info" />}
-          trend="devices"
+          trend={t("dashboard.trendDevices")}
           variant="info"
           loading={kpiLoading}
         />
         <StatCard
-          title="Assigned devices"
+          title={t("dashboard.assignedDevices")}
           value={assignedDeviceCount}
           icon={<UserCheck className="h-5 w-5 text-success" />}
-          trend="with patient"
+          trend={t("dashboard.trendWithPatient")}
           variant="success"
           loading={kpiLoading}
         />
         <StatCard
-          title="Needs Refill"
+          title={t("dashboard.needsRefill")}
           value={needsRefillCount}
           icon={<Package className="h-5 w-5 text-warning" />}
-          trend="Below threshold"
+          trend={t("dashboard.trendBelowThreshold")}
           variant="warning"
           loading={kpiLoading}
         />
         <StatCard
-          title="Pending Alerts"
+          title={t("dashboard.pendingAlerts")}
           value={pendingAlerts}
           icon={<HelpCircle className="h-5 w-5 text-destructive" />}
-          trend="Unacknowledged"
+          trend={t("dashboard.trendUnacknowledged")}
           variant="destructive"
           loading={kpiLoading}
         />
@@ -202,19 +206,19 @@ const Dashboard: React.FC = () => {
 
       <div className="space-y-4">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-          <h2 className="text-lg font-semibold text-foreground">Analytics Overview</h2>
+          <h2 className="text-lg font-semibold text-foreground">{t("dashboard.analyticsOverview")}</h2>
           <Tabs value={period} onValueChange={(v) => setPeriod(v as Period)}>
             <TabsList>
-              <TabsTrigger value="weekly">Weekly</TabsTrigger>
-              <TabsTrigger value="monthly">Monthly</TabsTrigger>
-              <TabsTrigger value="yearly">Yearly</TabsTrigger>
+              <TabsTrigger value="weekly">{t("dashboard.weekly")}</TabsTrigger>
+              <TabsTrigger value="monthly">{t("dashboard.monthly")}</TabsTrigger>
+              <TabsTrigger value="yearly">{t("dashboard.yearly")}</TabsTrigger>
             </TabsList>
           </Tabs>
         </div>
 
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
           <div className="rounded-xl border bg-card shadow-card p-5">
-            <h3 className="text-sm font-semibold text-card-foreground mb-4">Dispensing Activity</h3>
+            <h3 className="text-sm font-semibold text-card-foreground mb-4">{t("dashboard.dispensingActivity")}</h3>
             {isLoading ? (
               <div className="h-[250px] p-5">
                 <div className="h-4 w-2/3 rounded bg-muted/60 dark:bg-muted/40 animate-pulse" />
@@ -222,7 +226,7 @@ const Dashboard: React.FC = () => {
               </div>
             ) : !dispenseHasData ? (
               <p className="h-[250px] flex items-center justify-center text-sm text-muted-foreground px-4 text-center">
-                No dispensing events in this period for your devices yet.
+                {t("dashboard.noDispensePeriod")}
               </p>
             ) : (
               <ResponsiveContainer width="100%" height={250}>
@@ -245,7 +249,7 @@ const Dashboard: React.FC = () => {
           </div>
 
           <div className="rounded-xl border bg-card shadow-card p-5">
-            <h3 className="text-sm font-semibold text-card-foreground mb-4">Errors &amp; Refills</h3>
+            <h3 className="text-sm font-semibold text-card-foreground mb-4">{t("dashboard.errorsRefills")}</h3>
             {isLoading ? (
               <div className="h-[250px] p-5">
                 <div className="h-4 w-2/3 rounded bg-muted/60 dark:bg-muted/40 animate-pulse" />
@@ -253,7 +257,7 @@ const Dashboard: React.FC = () => {
               </div>
             ) : !dispenseHasData ? (
               <p className="h-[250px] flex items-center justify-center text-sm text-muted-foreground px-4 text-center">
-                No error or refill log events in this period.
+                {t("dashboard.noErrorsRefills")}
               </p>
             ) : (
               <ResponsiveContainer width="100%" height={250}>
@@ -278,14 +282,14 @@ const Dashboard: React.FC = () => {
           </div>
 
           <div className="rounded-xl border bg-card shadow-card p-5">
-            <h3 className="text-sm font-semibold text-card-foreground mb-4">Device Status Distribution</h3>
+            <h3 className="text-sm font-semibold text-card-foreground mb-4">{t("dashboard.distribution")}</h3>
             {kpiLoading ? (
               <div className="h-[250px] flex items-center justify-center p-5">
                 <div className="h-32 w-32 rounded-full bg-muted/30 dark:bg-muted/20 animate-pulse" />
               </div>
             ) : !pieHasData ? (
               <p className="h-[250px] flex items-center justify-center text-sm text-muted-foreground px-4 text-center">
-                No devices on file for your pharmacy yet.
+                {t("dashboard.noDevicesPharmacy")}
               </p>
             ) : (
               <ResponsiveContainer width="100%" height={250}>
@@ -320,7 +324,7 @@ const Dashboard: React.FC = () => {
           </div>
 
           <div className="rounded-xl border bg-card shadow-card p-5">
-            <h3 className="text-sm font-semibold text-card-foreground mb-4">Help Requests Trend</h3>
+            <h3 className="text-sm font-semibold text-card-foreground mb-4">{t("dashboard.helpTrend")}</h3>
             {isLoading ? (
               <div className="h-[250px] p-5">
                 <div className="h-4 w-2/3 rounded bg-muted/60 dark:bg-muted/40 animate-pulse" />
@@ -328,7 +332,7 @@ const Dashboard: React.FC = () => {
               </div>
             ) : !helpTrendHasData ? (
               <p className="h-[250px] flex items-center justify-center text-sm text-muted-foreground px-4 text-center">
-                No help-request activity in this period.
+                {t("dashboard.noHelpPeriod")}
               </p>
             ) : (
               <ResponsiveContainer width="100%" height={250}>
@@ -345,8 +349,8 @@ const Dashboard: React.FC = () => {
                     }}
                   />
                   <Legend wrapperStyle={{ fontSize: 12 }} />
-                  <Line type="monotone" dataKey="requests" stroke="hsl(var(--info))" strokeWidth={2} dot={{ r: 4 }} name="Opened" />
-                  <Line type="monotone" dataKey="resolved" stroke="hsl(160, 84%, 39%)" strokeWidth={2} dot={{ r: 4 }} name="Resolved" />
+                  <Line type="monotone" dataKey="requests" stroke="hsl(var(--info))" strokeWidth={2} dot={{ r: 4 }} name={t("dashboard.legendOpened")} />
+                  <Line type="monotone" dataKey="resolved" stroke="hsl(160, 84%, 39%)" strokeWidth={2} dot={{ r: 4 }} name={t("dashboard.legendResolved")} />
                 </LineChart>
               </ResponsiveContainer>
             )}
@@ -357,14 +361,14 @@ const Dashboard: React.FC = () => {
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         <div className="lg:col-span-2 rounded-xl border bg-card shadow-card">
           <div className="flex items-center justify-between border-b p-4">
-            <h2 className="font-semibold text-card-foreground">Devices Overview</h2>
+            <h2 className="font-semibold text-card-foreground">{t("dashboard.devicesOverview")}</h2>
             <Button variant="outline" size="sm" onClick={() => navigate("/devices")}>
-              View All
+              {t("common.viewAll")}
             </Button>
           </div>
           <div className="divide-y">
             {devicesOverviewRows.length === 0 ? (
-              <div className="p-4 text-sm text-muted-foreground">No devices linked to your pharmacy yet.</div>
+              <div className="p-4 text-sm text-muted-foreground">{t("dashboard.noDevicesLinked")}</div>
             ) : (
               devicesOverviewRows.map((device: any) => (
                 <div
@@ -386,7 +390,7 @@ const Dashboard: React.FC = () => {
                       <p className="text-sm text-card-foreground">
                         {device.remainingPouches}/{device.totalPouches}
                       </p>
-                      <p className="text-xs text-muted-foreground">pouches</p>
+                      <p className="text-xs text-muted-foreground">{t("common.pouches")}</p>
                     </div>
                     <StatusBadge status={badgeStatus(device.status)} />
                   </div>
@@ -400,11 +404,11 @@ const Dashboard: React.FC = () => {
           <div className="rounded-xl border bg-card shadow-card">
             <div className="flex items-center gap-2 border-b p-4">
               <Bell className="h-4 w-4 text-warning" />
-              <h2 className="font-semibold text-card-foreground">Refill Alerts</h2>
+              <h2 className="font-semibold text-card-foreground">{t("dashboard.refillAlerts")}</h2>
             </div>
             <div className="divide-y">
               {(previews.refillNotifications ?? []).length === 0 ? (
-                <div className="p-4 text-sm text-muted-foreground">No devices below refill threshold.</div>
+                <div className="p-4 text-sm text-muted-foreground">{t("dashboard.noRefillThreshold")}</div>
               ) : (
                 (previews.refillNotifications ?? []).map((notif: any) => (
                   <div
@@ -416,12 +420,12 @@ const Dashboard: React.FC = () => {
                       <p className="text-sm font-medium text-card-foreground">{notif.patientName}</p>
                       {notif.urgent && (
                         <span className="text-xs font-medium text-destructive bg-destructive/10 px-2 py-0.5 rounded-full">
-                          Urgent
+                          {t("common.urgent")}
                         </span>
                       )}
                     </div>
                     <p className="text-xs text-muted-foreground">
-                      {notif.deviceId} — {notif.remainingPouches} pouches left (threshold {notif.threshold})
+                      {t("common.pouchesLeftLine", { deviceId: notif.deviceId, count: notif.remainingPouches, threshold: notif.threshold })}
                     </p>
                   </div>
                 ))
@@ -433,15 +437,15 @@ const Dashboard: React.FC = () => {
             <div className="flex items-center justify-between border-b p-4">
               <div className="flex items-center gap-2">
                 <HelpCircle className="h-4 w-4 text-info" />
-                <h2 className="font-semibold text-card-foreground">SOS &amp; help</h2>
+                <h2 className="font-semibold text-card-foreground">{t("dashboard.sosHelp")}</h2>
               </div>
               <Button variant="ghost" size="sm" onClick={() => navigate("/help-support")}>
-                View All
+                {t("common.viewAll")}
               </Button>
             </div>
             <div className="divide-y">
               {(previews.helpRequests ?? []).length === 0 ? (
-                <div className="p-4 text-sm text-muted-foreground">No recent SOS or help requests.</div>
+                <div className="p-4 text-sm text-muted-foreground">{t("dashboard.noSosHelp")}</div>
               ) : (
                 (previews.helpRequests ?? []).map((req: any) => (
                   <div key={req.id} className="p-4">
@@ -450,12 +454,12 @@ const Dashboard: React.FC = () => {
                       <div className="flex items-center gap-2 shrink-0">
                         {req.requestSource === "sos" && (
                           <span className="text-[10px] font-semibold uppercase tracking-wide text-destructive bg-destructive/10 px-2 py-0.5 rounded-full">
-                            SOS
+                            {t("dashboard.sos")}
                           </span>
                         )}
                         {req.requestSource === "help" && (
                           <span className="text-[10px] font-semibold uppercase tracking-wide text-info bg-info/10 px-2 py-0.5 rounded-full">
-                            Help
+                            {t("dashboard.help")}
                           </span>
                         )}
                         <StatusBadge status={badgeStatus(req.status)} />

@@ -1,4 +1,5 @@
 import React, { useState, useCallback, useMemo, useEffect } from "react";
+import { useTranslation } from "react-i18next";
 import { AlertTriangle, HelpCircle, Search, Filter, Calendar, X } from "lucide-react";
 import StatusBadge from "@/components/StatusBadge";
 import type { HelpRequest } from "@/data/mockData";
@@ -30,6 +31,7 @@ function parseHelpDate(ts: string): Date {
 }
 
 const HelpSupport: React.FC = () => {
+  const { t } = useTranslation();
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [kindFilter, setKindFilter] = useState<string>("all");
@@ -95,6 +97,7 @@ const HelpSupport: React.FC = () => {
   }, []);
   const isEmpty = requests.length === 0;
   const hasNoResults = filtered.length === 0 && hasActiveFilters;
+  const dash = t("common.dash");
 
   const openResolveDialog = (req: HelpRequest) => {
     setResolveDialog({ open: true, req });
@@ -122,13 +125,13 @@ const HelpSupport: React.FC = () => {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["pharmacy", "help-requests"] });
-      toast.success("Help request resolved", {
-        description: resolveReason.trim() ? "Resolution reason saved." : undefined,
+      toast.success(t("helpSupport.resolvedToast"), {
+        description: resolveReason.trim() ? t("helpSupport.resolvedDesc") : undefined,
       });
       closeResolveDialog();
     },
     onError: (e: any) => {
-      toast.error(e?.message ?? "Failed to resolve help request");
+      toast.error(e?.message ?? t("helpSupport.resolveFailed"));
       queryClient.invalidateQueries({ queryKey: ["pharmacy", "help-requests"] });
     },
   });
@@ -149,9 +152,9 @@ const HelpSupport: React.FC = () => {
   return (
     <div className="space-y-6 animate-slide-in">
       <div>
-        <h1 className="text-2xl font-bold text-foreground">Help & Support</h1>
+        <h1 className="text-2xl font-bold text-foreground">{t("helpSupport.title")}</h1>
         <p className="text-sm text-muted-foreground mt-1">
-          SOS emergencies and help requests from patient devices (same queue).
+          {t("helpSupport.subtitle")}
         </p>
       </div>
 
@@ -161,11 +164,11 @@ const HelpSupport: React.FC = () => {
           <div className="relative flex-1 min-w-[200px] max-w-sm">
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground pointer-events-none" />
             <Input
-              placeholder="Search by request ID, device, or patient..."
+              placeholder={t("helpSupport.searchPlaceholder")}
               value={search}
               onChange={(e) => { setSearch(e.target.value); setPage(1); }}
               className="pl-9 pr-9"
-              aria-label="Search help requests"
+              aria-label={t("helpSupport.searchAria")}
             />
             {search.length > 0 && (
               <Button
@@ -174,7 +177,7 @@ const HelpSupport: React.FC = () => {
                 size="icon"
                 className="absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7 text-muted-foreground hover:text-foreground"
                 onClick={() => { setSearch(""); setPage(1); }}
-                aria-label="Clear search"
+                aria-label={t("common.clearSearch")}
               >
                 <X className="h-4 w-4" />
               </Button>
@@ -182,27 +185,27 @@ const HelpSupport: React.FC = () => {
           </div>
           <div className="flex items-center gap-2">
             <Filter className="h-4 w-4 text-muted-foreground shrink-0" />
-            <span className="text-sm text-muted-foreground whitespace-nowrap">Status:</span>
+            <span className="text-sm text-muted-foreground whitespace-nowrap">{t("helpSupport.statusLabel")}</span>
             <Select value={statusFilter} onValueChange={(v) => { setStatusFilter(v); setPage(1); }}>
               <SelectTrigger className="w-[130px]">
-                <SelectValue placeholder="Status" />
+                <SelectValue placeholder={t("helpSupport.statusPlaceholder")} />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">All</SelectItem>
-                <SelectItem value="pending">Pending</SelectItem>
-                <SelectItem value="in_progress">In progress</SelectItem>
-                <SelectItem value="resolved">Resolved</SelectItem>
+                <SelectItem value="all">{t("common.all")}</SelectItem>
+                <SelectItem value="pending">{t("helpSupport.filterPending")}</SelectItem>
+                <SelectItem value="in_progress">{t("helpSupport.filterInProgress")}</SelectItem>
+                <SelectItem value="resolved">{t("helpSupport.filterResolved")}</SelectItem>
               </SelectContent>
             </Select>
-            <span className="text-sm text-muted-foreground whitespace-nowrap">Type:</span>
+            <span className="text-sm text-muted-foreground whitespace-nowrap">{t("helpSupport.typeLabel")}</span>
             <Select value={kindFilter} onValueChange={(v) => { setKindFilter(v); setPage(1); }}>
               <SelectTrigger className="w-[120px]">
-                <SelectValue placeholder="Type" />
+                <SelectValue placeholder={t("helpSupport.typePlaceholder")} />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">All types</SelectItem>
-                <SelectItem value="sos">SOS</SelectItem>
-                <SelectItem value="help">Help</SelectItem>
+                <SelectItem value="all">{t("helpSupport.allTypes")}</SelectItem>
+                <SelectItem value="sos">{t("helpSupport.badgeSos")}</SelectItem>
+                <SelectItem value="help">{t("helpSupport.badgeHelp")}</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -215,7 +218,7 @@ const HelpSupport: React.FC = () => {
                 setDateFrom(e.target.value);
                 setPage(1);
               }}
-              aria-label="From date"
+              aria-label={t("common.fromDate")}
             />
             <span className="text-muted-foreground text-sm shrink-0">–</span>
             <DateInput
@@ -225,30 +228,30 @@ const HelpSupport: React.FC = () => {
                 setDateTo(e.target.value);
                 setPage(1);
               }}
-              aria-label="To date"
+              aria-label={t("common.toDate")}
             />
           </div>
           {hasActiveFilters && (
             <Button variant="ghost" size="sm" onClick={clearFilters}>
-              Clear filters
+              {t("common.clearFilters")}
             </Button>
           )}
         </div>
         {hasActiveFilters && (
           <p className="text-xs text-muted-foreground mt-2">
-            {filtered.length} result{filtered.length !== 1 ? "s" : ""} found
+            {t("common.resultsFound", { count: filtered.length })}
           </p>
         )}
       </div>
 
-      {isLoading && <LoadingCard message="Loading help requests…" />}
+      {isLoading && <LoadingCard message={t("helpSupport.loading")} />}
 
       {!isLoading && isError && (
         <div className="rounded-xl border bg-card p-12 text-center">
           <HelpCircle className="mx-auto h-12 w-12 text-destructive" />
-          <h2 className="mt-4 text-lg font-semibold text-foreground">Could not load help requests</h2>
+          <h2 className="mt-4 text-lg font-semibold text-foreground">{t("helpSupport.loadErrorTitle")}</h2>
           <p className="mt-2 text-sm text-muted-foreground max-w-sm mx-auto">
-            There was a problem fetching help requests from the server. Please refresh the page or contact support if this continues.
+            {t("helpSupport.loadErrorHint")}
           </p>
         </div>
       )}
@@ -256,9 +259,9 @@ const HelpSupport: React.FC = () => {
       {!isLoading && !isError && isEmpty && (
         <div className="rounded-xl border border-dashed bg-card p-12 text-center">
           <HelpCircle className="mx-auto h-12 w-12 text-muted-foreground" />
-          <h2 className="mt-4 text-lg font-semibold text-foreground">No SOS or help requests yet</h2>
+          <h2 className="mt-4 text-lg font-semibold text-foreground">{t("helpSupport.emptyTitle")}</h2>
           <p className="mt-2 text-sm text-muted-foreground max-w-sm mx-auto">
-            When a patient uses SOS or Help on the tablet, it appears here. Refill requests from the device may also use this list.
+            {t("helpSupport.emptyHint")}
           </p>
         </div>
       )}
@@ -266,10 +269,10 @@ const HelpSupport: React.FC = () => {
       {!isLoading && !isError && !isEmpty && hasNoResults && (
         <div className="rounded-xl border bg-card p-12 text-center">
           <Search className="mx-auto h-12 w-12 text-muted-foreground" />
-          <h2 className="mt-4 text-lg font-semibold text-foreground">No matching requests</h2>
-          <p className="mt-2 text-sm text-muted-foreground">Try a different search or clear filters.</p>
+          <h2 className="mt-4 text-lg font-semibold text-foreground">{t("helpSupport.noMatchTitle")}</h2>
+          <p className="mt-2 text-sm text-muted-foreground">{t("common.tryDifferentSearch")}</p>
           <Button variant="outline" className="mt-4" onClick={clearFilters}>
-            Clear filters
+            {t("common.clearFilters")}
           </Button>
         </div>
       )}
@@ -279,13 +282,13 @@ const HelpSupport: React.FC = () => {
           <table className="w-full">
             <thead>
               <tr className="border-b bg-muted/50">
-                <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Request ID</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Type</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Device</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider hidden sm:table-cell">Patient</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider hidden md:table-cell">Timestamp</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Status</th>
-                <th className="px-4 py-3 text-right text-xs font-medium text-muted-foreground uppercase tracking-wider">Action</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">{t("helpSupport.colRequestId")}</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">{t("helpSupport.colType")}</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">{t("helpSupport.colDevice")}</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider hidden sm:table-cell">{t("helpSupport.colPatient")}</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider hidden md:table-cell">{t("helpSupport.colTimestamp")}</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">{t("helpSupport.colStatus")}</th>
+                <th className="px-4 py-3 text-right text-xs font-medium text-muted-foreground uppercase tracking-wider">{t("helpSupport.colAction")}</th>
               </tr>
             </thead>
             <tbody className="divide-y">
@@ -300,14 +303,14 @@ const HelpSupport: React.FC = () => {
                   <td className="px-4 py-3">
                     {req.requestSource === "sos" ? (
                       <span className="inline-flex items-center gap-1 rounded-full bg-destructive/15 text-destructive text-xs font-medium px-2 py-0.5">
-                        <AlertTriangle className="h-3 w-3" /> SOS
+                        <AlertTriangle className="h-3 w-3" /> {t("helpSupport.badgeSos")}
                       </span>
                     ) : req.requestSource === "help" ? (
                       <span className="inline-flex items-center gap-1 rounded-full bg-info/15 text-info text-xs font-medium px-2 py-0.5">
-                        <HelpCircle className="h-3 w-3" /> Help
+                        <HelpCircle className="h-3 w-3" /> {t("helpSupport.badgeHelp")}
                       </span>
                     ) : (
-                      <span className="text-xs text-muted-foreground">—</span>
+                      <span className="text-xs text-muted-foreground">{dash}</span>
                     )}
                   </td>
                   <td className="px-4 py-3 text-sm text-card-foreground">{req.deviceId}</td>
@@ -317,7 +320,7 @@ const HelpSupport: React.FC = () => {
                   <td className="px-4 py-3 text-right">
                     {req.status !== "resolved" && (
                       <Button variant="outline" size="sm" onClick={() => handleResolve(req.id)}>
-                        Resolve
+                        {t("helpSupport.resolveButton")}
                       </Button>
                     )}
                   </td>
@@ -327,7 +330,7 @@ const HelpSupport: React.FC = () => {
           </table>
           <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 px-4 py-3 border-t bg-muted/30">
             <div className="flex items-center gap-2">
-              <span className="text-sm text-muted-foreground whitespace-nowrap">Items per page:</span>
+              <span className="text-sm text-muted-foreground whitespace-nowrap">{t("common.itemsPerPage")}</span>
               <Select value={String(pageSize)} onValueChange={(v) => { setPageSize(Number(v)); setPage(1); }}>
                 <SelectTrigger className="w-[70px] h-8">
                   <SelectValue />
@@ -340,16 +343,18 @@ const HelpSupport: React.FC = () => {
               </Select>
             </div>
             <p className="text-sm text-muted-foreground">
-              Showing {startItem} to {endItem} of {filtered.length} results
+              {t("common.showingRange", { start: startItem, end: endItem, total: filtered.length })}
             </p>
             {totalPages > 1 && (
               <div className="flex items-center gap-2">
                 <Button variant="outline" size="sm" onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={safePage <= 1}>
-                  Previous
+                  {t("common.previous")}
                 </Button>
-                <span className="text-sm text-muted-foreground px-1">Page {safePage} of {totalPages}</span>
+                <span className="text-sm text-muted-foreground px-1">
+                  {t("pagination.pageOf", { page: safePage, total: totalPages })}
+                </span>
                 <Button variant="outline" size="sm" onClick={() => setPage((p) => Math.min(totalPages, p + 1))} disabled={safePage >= totalPages}>
-                  Next
+                  {t("common.next")}
                 </Button>
               </div>
             )}
@@ -360,36 +365,38 @@ const HelpSupport: React.FC = () => {
       <Dialog open={resolveDialog.open} onOpenChange={(open) => !open && closeResolveDialog()}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Resolve issue</DialogTitle>
+            <DialogTitle>{t("helpSupport.resolveTitle")}</DialogTitle>
             <DialogDescription>
-              Describe what the issue was and how you resolved it. This will be saved with the request.
+              {t("helpSupport.resolveDesc")}
             </DialogDescription>
           </DialogHeader>
           <div className="grid gap-4 py-4">
             <div className="space-y-2">
-              <Label>What was the issue?</Label>
+              <Label>{t("helpSupport.issueLabel")}</Label>
               <Textarea
                 value={resolveIssue}
                 onChange={(e) => setResolveIssue(e.target.value)}
-                placeholder="Brief description of the issue reported..."
+                placeholder={t("helpSupport.issuePlaceholder")}
                 rows={2}
                 className="resize-none"
               />
             </div>
             <div className="space-y-2">
-              <Label>How did you resolve it?</Label>
+              <Label>{t("helpSupport.resolutionLabel")}</Label>
               <Textarea
                 value={resolveReason}
                 onChange={(e) => setResolveReason(e.target.value)}
-                placeholder="e.g. Cleared pouch path, restarted device, contacted patient..."
+                placeholder={t("helpSupport.resolutionPlaceholder")}
                 rows={3}
                 className="resize-none"
               />
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={closeResolveDialog}>Cancel</Button>
-            <Button onClick={handleResolveSubmit} disabled={resolveMutation.isPending}>Resolve</Button>
+            <Button variant="outline" onClick={closeResolveDialog}>{t("common.cancel")}</Button>
+            <Button onClick={handleResolveSubmit} disabled={resolveMutation.isPending}>
+              {t("helpSupport.resolveButton")}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

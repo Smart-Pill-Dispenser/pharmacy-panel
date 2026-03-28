@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import { Eye, EyeOff, Pill } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -8,6 +9,7 @@ import { pharmacyApi } from "@/api/pharmacy";
 import { useAuth } from "@/contexts/AuthContext";
 
 const ForgotPassword: React.FC = () => {
+  const { t } = useTranslation();
   const { login } = useAuth();
   const navigate = useNavigate();
   const [email, setEmail] = useState("");
@@ -24,7 +26,7 @@ const ForgotPassword: React.FC = () => {
   const handleRequestCode = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!email) {
-      setError("Please enter your email");
+      setError(t("forgotPassword.errEmail"));
       return;
     }
     setLoading(true);
@@ -32,10 +34,10 @@ const ForgotPassword: React.FC = () => {
     setMessage("");
     try {
       await pharmacyApi.forgotPassword(email.trim());
-      setMessage("Reset code sent. Check your email.");
+      setMessage(t("forgotPassword.msgCodeSent"));
       setStep("reset");
-    } catch (err: any) {
-      setError(err?.message || "Unable to send reset code.");
+    } catch (err: unknown) {
+      setError((err as { message?: string })?.message || t("forgotPassword.errSendCode"));
     } finally {
       setLoading(false);
     }
@@ -44,11 +46,11 @@ const ForgotPassword: React.FC = () => {
   const handleResetPassword = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!code || !newPassword || !confirmPassword) {
-      setError("Please fill all fields");
+      setError(t("forgotPassword.errFillAll"));
       return;
     }
     if (newPassword !== confirmPassword) {
-      setError("Passwords do not match");
+      setError(t("forgotPassword.errMismatch"));
       return;
     }
     setLoading(true);
@@ -60,11 +62,11 @@ const ForgotPassword: React.FC = () => {
         code: code.trim(),
         newPassword,
       });
-      setMessage("Password reset successful. Logging you in...");
+      setMessage(t("forgotPassword.msgSuccess"));
       await login(email.trim(), newPassword);
       navigate("/", { replace: true });
-    } catch (err: any) {
-      setError(err?.message || "Unable to reset password.");
+    } catch (err: unknown) {
+      setError((err as { message?: string })?.message || t("forgotPassword.errReset"));
     } finally {
       setLoading(false);
     }
@@ -78,10 +80,10 @@ const ForgotPassword: React.FC = () => {
             <Pill className="h-10 w-10 text-primary-foreground" />
           </div>
           <h1 className="mb-4 text-4xl font-bold text-primary-foreground tracking-tight">
-            Navos ZET
+            {t("app.brand")}
           </h1>
           <p className="text-lg text-sidebar-fg/70">
-            Pharmacy Management Panel
+            {t("forgotPassword.hero")}
           </p>
         </div>
       </div>
@@ -89,18 +91,18 @@ const ForgotPassword: React.FC = () => {
       <div className="flex w-full lg:w-1/2 items-center justify-center p-8">
         <div className="w-full max-w-sm">
           <h2 className="mb-2 text-2xl font-bold text-foreground">
-            Forgot password
+            {t("forgotPassword.title")}
           </h2>
           <p className="mb-8 text-muted-foreground">
             {step === "request"
-              ? "Request a reset code for your account."
-              : "Enter the code and your new password."}
+              ? t("forgotPassword.stepRequest")
+              : t("forgotPassword.stepReset")}
           </p>
 
           {step === "request" ? (
             <form onSubmit={handleRequestCode} className="space-y-5">
               <div className="space-y-2">
-                <Label htmlFor="email">Email</Label>
+                <Label htmlFor="email">{t("forgotPassword.emailLabel")}</Label>
                 <Input
                   id="email"
                   type="email"
@@ -113,13 +115,13 @@ const ForgotPassword: React.FC = () => {
               {error && <p className="text-sm text-destructive">{error}</p>}
               {message && <p className="text-sm text-green-600">{message}</p>}
               <Button type="submit" className="w-full h-11" disabled={loading}>
-                {loading ? "Sending..." : "Send reset code"}
+                {loading ? t("forgotPassword.sending") : t("forgotPassword.sendCode")}
               </Button>
             </form>
           ) : (
             <form onSubmit={handleResetPassword} className="space-y-5">
               <div className="space-y-2">
-                <Label htmlFor="email">Email</Label>
+                <Label htmlFor="email">{t("forgotPassword.emailLabel")}</Label>
                 <Input
                   id="email"
                   type="email"
@@ -129,7 +131,7 @@ const ForgotPassword: React.FC = () => {
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="code">Reset code</Label>
+                <Label htmlFor="code">{t("forgotPassword.resetCodeLabel")}</Label>
                 <Input
                   id="code"
                   value={code}
@@ -138,7 +140,7 @@ const ForgotPassword: React.FC = () => {
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="newPassword">New password</Label>
+                <Label htmlFor="newPassword">{t("forgotPassword.newPasswordLabel")}</Label>
                 <div className="relative">
                   <Input
                     id="newPassword"
@@ -151,7 +153,7 @@ const ForgotPassword: React.FC = () => {
                     type="button"
                     onClick={() => setShowNewPassword((v) => !v)}
                     className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                    aria-label={showNewPassword ? "Hide new password" : "Show new password"}
+                    aria-label={showNewPassword ? t("forgotPassword.hideNewPassword") : t("forgotPassword.showNewPassword")}
                   >
                     {showNewPassword ? (
                       <EyeOff className="h-4 w-4" />
@@ -162,7 +164,7 @@ const ForgotPassword: React.FC = () => {
                 </div>
               </div>
               <div className="space-y-2">
-                <Label htmlFor="confirmPassword">Confirm password</Label>
+                <Label htmlFor="confirmPassword">{t("forgotPassword.confirmPasswordLabel")}</Label>
                 <div className="relative">
                   <Input
                     id="confirmPassword"
@@ -175,7 +177,7 @@ const ForgotPassword: React.FC = () => {
                     type="button"
                     onClick={() => setShowConfirmPassword((v) => !v)}
                     className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                    aria-label={showConfirmPassword ? "Hide confirm password" : "Show confirm password"}
+                    aria-label={showConfirmPassword ? t("forgotPassword.hideConfirmPassword") : t("forgotPassword.showConfirmPassword")}
                   >
                     {showConfirmPassword ? (
                       <EyeOff className="h-4 w-4" />
@@ -188,15 +190,15 @@ const ForgotPassword: React.FC = () => {
               {error && <p className="text-sm text-destructive">{error}</p>}
               {message && <p className="text-sm text-green-600">{message}</p>}
               <Button type="submit" className="w-full h-11" disabled={loading}>
-                {loading ? "Updating..." : "Reset password"}
+                {loading ? t("forgotPassword.updating") : t("forgotPassword.resetSubmit")}
               </Button>
             </form>
           )}
 
           <p className="mt-6 text-sm text-muted-foreground">
-            Back to{" "}
+            {t("forgotPassword.backTo")}{" "}
             <Link to="/login" className="font-medium text-primary hover:underline">
-              sign in
+              {t("forgotPassword.signInLink")}
             </Link>
           </p>
         </div>
