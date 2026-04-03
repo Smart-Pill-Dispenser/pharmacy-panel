@@ -172,5 +172,12 @@ export const pharmacyApi = {
   async deleteCaregiver(id: string): Promise<{ deleted: boolean }> {
     return pharmacyDelete<{ deleted: boolean }>(`pharmacy/caregivers/${encodeURIComponent(id)}`);
   },
+
+  async registerAlertNotifications(body: {
+    fcmToken?: string;
+    webPush?: { endpoint: string; keys: { p256dh: string; auth: string } };
+  }): Promise<{ ok?: boolean }> {
+    return pharmacyPost<{ ok?: boolean }>("pharmacy/notifications/register", body);
+  },
 };
 

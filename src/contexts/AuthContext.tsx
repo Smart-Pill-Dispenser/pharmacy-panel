@@ -1,5 +1,6 @@
-import React, { createContext, useContext, useState, useCallback } from "react";
+import React, { createContext, useContext, useState, useCallback, useEffect } from "react";
 import { pharmacyApi } from "@/api/pharmacy";
+import { tryRegisterPharmacyAlertWebPush } from "@/lib/alertWebPush";
 import { cognitoUsernameFromIdToken, pharmacyTokenStorage } from "@/api/client";
 
 interface AuthContextType {
@@ -64,6 +65,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       localStorage.setItem("pharmacy_user", JSON.stringify(fallbackUser));
     }
 
+    void tryRegisterPharmacyAlertWebPush();
     return true;
   }, []);
 
@@ -74,6 +76,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     localStorage.removeItem("pharmacy_user");
     pharmacyTokenStorage.clear();
   }, []);
+
+  useEffect(() => {
+    if (isAuthenticated) {
+      void tryRegisterPharmacyAlertWebPush();
+    }
+  }, [isAuthenticated]);
 
   return (
     <AuthContext.Provider value={{ isAuthenticated, user, login, logout }}>
