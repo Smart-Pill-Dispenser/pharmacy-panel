@@ -82,6 +82,14 @@ export const en = {
     pharmacy: "Pharmacy",
     panelSuffix: " Panel",
   },
+  notifications: {
+    bannerAria: "Browser notifications",
+    bannerTitle: "Enable browser notifications",
+    bannerBody: "Allow alerts for refills and urgent events on this computer.",
+    enable: "Allow notifications",
+    enabling: "Enabling…",
+    dismiss: "Maybe later",
+  },
   login: {
     hero: "Pharmacy Management Panel — Monitor devices, manage refills, and ensure patient safety from one centralized dashboard.",
     welcomeBack: "Welcome back",

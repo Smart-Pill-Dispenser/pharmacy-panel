@@ -84,6 +84,14 @@ export const sk: PharmacyMessages = {
     pharmacy: "Lekáreň",
     panelSuffix: " panel",
   },
+  notifications: {
+    bannerAria: "Upozornenia v prehliadači",
+    bannerTitle: "Zapnite upozornenia v prehliadači",
+    bannerBody: "Povoľte upozornenia na dopĺňanie a naliehavé udalosti na tomto počítači.",
+    enable: "Povoliť upozornenia",
+    enabling: "Povoľuje sa…",
+    dismiss: "Neskôr",
+  },
   login: {
     hero:
       "Panel správy lekárne — sledujte zariadenia, spravujte dopĺňanie a zabezpečte bezpečnosť pacientov z jedného centrálneho prehľadu.",

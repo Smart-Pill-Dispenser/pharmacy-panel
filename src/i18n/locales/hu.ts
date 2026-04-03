@@ -84,6 +84,14 @@ export const hu: PharmacyMessages = {
     pharmacy: "Gyógyszertár",
     panelSuffix: " felület",
   },
+  notifications: {
+    bannerAria: "Böngésző értesítések",
+    bannerTitle: "Kapcsolja be a böngésző értesítéseit",
+    bannerBody: "Engedélyezze az értesítéseket az utántöltések és sürgős eseményekhez ezen a gépen.",
+    enable: "Értesítések engedélyezése",
+    enabling: "Engedélyezés…",
+    dismiss: "Később",
+  },
   login: {
     hero:
       "Gyógyszertár-kezelő felület — Figyelje az eszközöket, kezelje az utántöltéseket, és egy központi irányítópultról biztosítsa a páciensek biztonságát.",

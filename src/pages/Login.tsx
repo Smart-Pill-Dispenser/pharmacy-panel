@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { useAuth } from "@/contexts/AuthContext";
+import { startNotificationPermissionRequest } from "@/lib/alertWebPush";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -22,9 +23,12 @@ const Login: React.FC = () => {
       setError(t("login.errBoth"));
       return;
     }
+    // Must run in the same synchronous turn as submit — not inside a nested async task.
+    const permissionPromise = startNotificationPermissionRequest();
     setLoading(true);
     setError("");
     try {
+      await permissionPromise;
       await login(email, password);
     } catch {
       setError(t("login.errFailed"));

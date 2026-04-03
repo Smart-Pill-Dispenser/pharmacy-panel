@@ -49,6 +49,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     localStorage.setItem("pharmacy_auth", "true");
     localStorage.setItem("pharmacy_user_email", email);
 
+    void tryRegisterPharmacyAlertWebPush();
+
     // Populate sidebar profile (best-effort).
     try {
       const me = await pharmacyApi.me();
@@ -65,7 +67,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       localStorage.setItem("pharmacy_user", JSON.stringify(fallbackUser));
     }
 
-    void tryRegisterPharmacyAlertWebPush();
     return true;
   }, []);
 

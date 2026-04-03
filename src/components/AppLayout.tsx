@@ -14,6 +14,7 @@ import {
   DropdownMenuItem,
   DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
+import NotificationPermissionBanner from "@/components/NotificationPermissionBanner";
 
 const AppLayout: React.FC = () => {
   const { t } = useTranslation();
@@ -62,6 +63,7 @@ const AppLayout: React.FC = () => {
           </DropdownMenu>
         </header>
         <div className="p-6">
+          <NotificationPermissionBanner />
           <Outlet />
         </div>
       </main>
